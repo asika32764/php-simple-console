@@ -108,6 +108,44 @@ Console will auto show help information.
     v          Show more debug information.
 ```
 
+## Multiple Commands
+
+Use `delegate()` to delegate to different methods.
+
+``` php
+//...
+
+    protected function doExecute()
+    {
+        return $this->delegate($this->getArgument(0));
+    }
+
+    protected function foo()
+    {
+        $this->getArgument(1); // bar
+    }
+
+    protected function baz()
+    {
+        // ...
+    }
+```
+
+Now you can add sub commands
+
+``` bash
+php console.php foo bar
+php console.php baz
+```
+
+If you want to strip first argument after delgated, you can follow this code:
+
+``` php
+$this->delegate(array_shift($this->args));
+```
+
+Now can use `getArgument(0)` in sub method and ignore the first command name.
+
 ## API
 
 ### `getArgument($order[, $default = null])`
