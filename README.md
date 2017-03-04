@@ -17,6 +17,8 @@ Or downlaod single file to use: [Download Here](https://raw.githubusercontent.co
 Use closure
 
 ``` php
+#!/bin/sh php
+<?php
 // Include single file
 include_once __DIR__ . '/Console.php';
 
