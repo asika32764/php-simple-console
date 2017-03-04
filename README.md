@@ -146,6 +146,20 @@ $this->delegate(array_shift($this->args));
 
 Now can use `getArgument(0)` in sub method and ignore the first command name.
 
+The is another way:
+
+``` php
+$command = array_shift($this->args);
+
+$this->delegate($command, ...$this->args);
+```
+
+``` php
+protected function foo($first, $second = null)
+{
+}
+```
+
 ## API
 
 ### `getArgument($order[, $default = null])`
