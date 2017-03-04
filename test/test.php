@@ -16,4 +16,8 @@ $app = new Foo;
 $app->execute(function ($app)
 {
     $this->out('Hello');
+
+    $a = $this->in('Are you sure [Y/n]', true, true);
+
+    $this->out($a);
 });

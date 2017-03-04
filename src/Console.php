@@ -51,6 +51,16 @@ class Console
 	protected $helpOptions = array('h', 'help');
 
 	/**
+	 * Property booleanMapping.
+	 *
+	 * @var  array
+	 */
+	protected $booleanMapping = array(
+		0 => array('n', 'no', 'false', 0, '0', true),
+		1 => array('y', 'yes', 'true', 1, '1', false, null)
+	);
+
+	/**
 	 * CliInput constructor.
 	 *
 	 * @param array $argv
@@ -292,14 +302,48 @@ class Console
 	 * in
 	 *
 	 * @param string $ask
+	 * @param mixed  $default
 	 *
 	 * @return  string
 	 */
-	public function in($ask = '')
+	public function in($ask = '', $default = null, $bool = false)
 	{
 		$this->out($ask, false);
 
-		return fread(STDIN);
+		$in = rtrim(fread(STDIN, 8192), "\n\r");
+
+		if ($bool)
+		{
+			$in = $in === '' ? $default : $in;
+
+			return (bool) $this->mapBoolean($in);
+		}
+
+		return $in === '' ? (string) $default : $in;
+	}
+
+	/**
+	 * mapBoolean
+	 *
+	 * @param string $in
+	 *
+	 * @return  bool
+	 */
+	public function mapBoolean($in)
+	{
+		$in = strtolower((string) $in);
+
+		if (in_array($in, $this->booleanMapping[0], true))
+		{
+			return false;
+		}
+
+		if (in_array($in, $this->booleanMapping[1], true))
+		{
+			return true;
+		}
+
+		return null;
 	}
 
 	/**
