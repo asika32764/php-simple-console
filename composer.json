@@ -1,0 +1,18 @@
+{
+    "name": "asika/simple-console",
+    "description": "One file console framework to help you write build scripts.",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Simon Asika",
+            "email": "asika32764@gmail.com"
+        }
+    ],
+    "minimum-stability": "beta",
+    "require": {},
+    "autoload": {
+        "psr-4": {
+            "Asika\\SimpleConsole\\": "src/"
+        }
+    }
+}
