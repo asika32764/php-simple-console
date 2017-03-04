@@ -166,14 +166,14 @@ Ask a question, read from STDIN
 $un = $this->in('Please enter username: ', 'default_name');
 ```
 
-Read as boolean:
-
-- `yes, y, 1, true` will convert to `TRUE`
-- `no, n, 0, false` will convert to `FALSE`
+Read as boolean, add true to third argument:
 
 ``` bash
 $bool = $this->in('Are you sure? [Y/n]', [default true/false], true);
 ```
+
+- `yes, y, 1, true` will convert to `TRUE`
+- `no, n, 0, false` will convert to `FALSE`
 
 ### `exec($cmd)`
 
