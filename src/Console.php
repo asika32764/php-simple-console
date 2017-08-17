@@ -150,26 +150,6 @@ class Console
 	}
 
 	/**
-	 * delegate
-	 *
-	 * @param string $method
-	 *
-	 * @return  mixed
-	 */
-	protected function delegate($method)
-	{
-		$args = func_get_args();
-		array_shift($args);
-
-		if (!is_callable(array($this, $method)))
-		{
-			throw new \LogicException(sprintf('Method: %s not found', $method));
-		}
-
-		return call_user_func_array(array($this, $method), $args);
-	}
-
-	/**
 	 * getHelp
 	 *
 	 * @return  string
@@ -377,9 +357,7 @@ class Console
 	{
 		$this->out('>> ' . $command);
 
-		$return = exec($command);
-
-		$this->out($return . "\n");
+		$return = system($command);
 
 		return $this;
 	}
