@@ -10,7 +10,19 @@ Use composer:
 composer require asika/simple-console
 ```
 
-Or downlaod single file to use: [Download Here](https://raw.githubusercontent.com/asika32764/php-simple-console/master/src/Console.php)
+Download single file: [Download Here](https://raw.githubusercontent.com/asika32764/php-simple-console/master/src/Console.php)
+
+CLI quick download:
+
+```shell
+# WGET
+wget https://raw.githubusercontent.com/asika32764/php-simple-console/master/src/Console.php
+chmod +x Console.php
+
+# CURL
+curl https://raw.githubusercontent.com/asika32764/php-simple-console/master/src/Console.php -o Console.php
+chmod +x Console.php
+```
 
 ## Getting Started
 

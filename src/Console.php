@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Part of Simple Console project.
  *
@@ -8,51 +9,34 @@
 
 namespace Asika\SimpleConsole;
 
-/**
- * The Console class.
- *
- * @since  1.0
- */
 class Console
 {
     /**
-     * Property executable.
-     *
      * @var  string
      */
     protected $executable;
 
     /**
-     * Property args.
-     *
      * @var  array
      */
     protected $args = array();
 
     /**
-     * Property options.
-     *
      * @var  array
      */
     protected $options = array();
 
     /**
-     * Property help.
-     *
      * @var  string
      */
     protected $help = '';
 
     /**
-     * Property helpIptions.
-     *
      * @var  array
      */
     protected $helpOptions = array('h', 'help');
 
     /**
-     * Property booleanMapping.
-     *
      * @var  array
      */
     protected $booleanMapping = array(
@@ -61,8 +45,6 @@ class Console
     );
 
     /**
-     * CliInput constructor.
-     *
      * @param array $argv
      */
     public function __construct($argv = null)
@@ -73,8 +55,6 @@ class Console
     }
 
     /**
-     * init
-     *
      * @return  void
      */
     protected function init()
@@ -83,8 +63,6 @@ class Console
     }
 
     /**
-     * execute
-     *
      * @param \Closure|null $callback
      *
      * @return  int
@@ -125,8 +103,6 @@ class Console
     }
 
     /**
-     * doExecute
-     *
      * @return  mixed
      */
     protected function doExecute()
@@ -136,8 +112,6 @@ class Console
     }
 
     /**
-     * delegate
-     *
      * @param string $method
      *
      * @return  mixed
@@ -155,8 +129,6 @@ class Console
     }
 
     /**
-     * getHelp
-     *
      * @return  string
      */
     protected function getHelp()
@@ -165,8 +137,6 @@ class Console
     }
 
     /**
-     * handleException
-     *
      * @param \Exception|\Throwable $e
      *
      * @return  int
@@ -194,8 +164,6 @@ class Console
     }
 
     /**
-     * getArgument
-     *
      * @param int   $offset
      * @param mixed $default
      *
@@ -211,8 +179,6 @@ class Console
     }
 
     /**
-     * setArgument
-     *
      * @param int   $offset
      * @param mixed $value
      *
@@ -226,8 +192,6 @@ class Console
     }
 
     /**
-     * getOption
-     *
      * @param string|array $name
      * @param mixed        $default
      *
@@ -247,8 +211,6 @@ class Console
     }
 
     /**
-     * setOption
-     *
      * @param string|array $name
      * @param mixed        $value
      *
@@ -266,8 +228,6 @@ class Console
     }
 
     /**
-     * out
-     *
      * @param   string  $text
      * @param   boolean $nl
      *
@@ -281,8 +241,6 @@ class Console
     }
 
     /**
-     * err
-     *
      * @param   string  $text
      * @param   boolean $nl
      *
@@ -296,8 +254,6 @@ class Console
     }
 
     /**
-     * in
-     *
      * @param string $ask
      * @param mixed  $default
      *
@@ -319,8 +275,6 @@ class Console
     }
 
     /**
-     * mapBoolean
-     *
      * @param string $in
      *
      * @return  bool
@@ -341,8 +295,6 @@ class Console
     }
 
     /**
-     * exec
-     *
      * @param   string $command
      *
      * @return  static
@@ -357,8 +309,6 @@ class Console
     }
 
     /**
-     * parseArgv
-     *
      * @param array $argv
      *
      * @return  void
