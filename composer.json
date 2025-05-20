@@ -9,10 +9,17 @@
         }
     ],
     "minimum-stability": "beta",
-    "require": {},
+    "require": {
+        "php": ">=8.4"
+    },
     "autoload": {
         "psr-4": {
-            "Asika\\SimpleConsole\\": "src/"
+            "Asika\\": "src/"
         }
+    },
+    "require-dev": {
+        "symfony/console": "^7.3@beta",
+        "symfony/process": "^7.3@beta",
+        "phpunit/phpunit": "^12.1"
     }
 }
