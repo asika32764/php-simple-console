@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Asika {
+namespace Asika\SimpleConsole {
     class SimpleConsole
     {
     }
@@ -10,6 +10,8 @@ namespace Asika {
     class ArgumentParser
     {
         protected array $parsed = [];
+
+        protected int $currentArgument = 0;
 
         /**
          * @var array<Parameter>
@@ -55,26 +57,49 @@ namespace Asika {
             return $parameter;
         }
 
-        public function parse(array $argv)
-        {
-            array_shift($argv);
-
-            $parseOptions = true;
-            $this->parsed = $argv;
-
-            while (null !== $token = array_shift($this->parsed)) {
-                $parseOptions = $this->parseToken((string) $token, $parseOptions);
-            }
-        }
-
         public function getArgument(string $name): ?Parameter
         {
             return array_find(iterator_to_array($this->arguments), static fn($n) => $n === $name);
         }
 
+        public function getArgumentByIndex(int $index): ?Parameter
+        {
+            return iterator_to_array($this->arguments)[$index] ?? null;
+        }
+
+        public function getLastArgument(): ?Parameter
+        {
+            $args = iterator_to_array($this->arguments);
+
+            return $args[array_key_last($args)] ?? null;
+        }
+
         public function getOption(string $name): ?Parameter
         {
-            return array_find(iterator_to_array($this->options), static fn($option) => $option->hasName($name));
+            if (!str_starts_with($name, '-')) {
+                if (strlen($name) === 1) {
+                    $name = '-' . $name;
+                } else {
+                    $name = '--' . $name;
+                }
+            }
+
+            return array_find(iterator_to_array($this->options), static fn(Parameter $option) => $option->hasName($name));
+        }
+
+        public function parse(array $argv): array
+        {
+            $this->parsed = [];
+
+            array_shift($argv);
+
+            $parseOptions = true;
+
+            while (null !== $token = array_shift($argv)) {
+                $parseOptions = $this->parseToken((string) $token, $parseOptions);
+            }
+
+            return $this->parsed;
         }
 
         protected function parseToken(string $token, bool $parseOptions): bool
@@ -111,34 +136,27 @@ namespace Asika {
             }
         }
 
-        /**
-         * Parses a short option set.
-         *
-         * @throws RuntimeException When option given doesn't exist
-         */
         private function parseShortOptionSet(string $name): void
         {
             $len = \strlen($name);
             for ($i = 0; $i < $len; ++$i) {
-                if (!$this->definition->hasShortcut($name[$i])) {
-                    $encoding = mb_detect_encoding($name, null, true);
-                    throw new RuntimeException(\sprintf('The "-%s" option does not exist.', false === $encoding ? $name[$i] : mb_substr($name, $i, 1, $encoding)));
+                $this->getOption($name[$i]);
+
+                $option = $this->getOption('-' . $name[$i]);
+
+                if (!$option) {
+                    throw new \RuntimeException(\sprintf('The "-%s" option does not exist.', $name[$i]));
                 }
 
-                $option = $this->definition->getOptionForShortcut($name[$i]);
-                if ($option->acceptValue()) {
-                    $this->addLongOption($option->getName(), $i === $len - 1 ? null : substr($name, $i + 1));
-
+                if ($option->acceptValue) {
+                    $this->parsed[$option->primaryName] = $i === $len - 1 ? null : substr($name, $i + 1);
                     break;
                 }
 
-                $this->addLongOption($option->getName(), null);
+                $this->parsed[$name[$i]] = null;
             }
         }
 
-        /**
-         * Parses a long option.
-         */
         private function parseLongOption(string $token): void
         {
             $name = substr($token, 2);
@@ -147,53 +165,25 @@ namespace Asika {
                 if ('' === $value = substr($name, $pos + 1)) {
                     array_unshift($this->parsed, $value);
                 }
-                $this->addLongOption(substr($name, 0, $pos), $value);
+
+                $this->parsed[substr($name, 0, $pos)] = $value;
             } else {
-                $this->addLongOption($name, null);
+                $this->parsed[$name] = null;
             }
         }
 
-        /**
-         * Parses an argument.
-         *
-         * @throws RuntimeException When too many arguments are given
-         */
         private function parseArgument(string $token): void
         {
-            $c = \count($this->parameters);
+            $c = $this->currentArgument;
 
-            // if input is expecting another argument, add it
-            if ($this->definition->hasArgument($c)) {
-                $arg = $this->definition->getArgument($c);
-                $this->parameters[$arg->getName()] = $arg->isArray() ? [$token] : $token;
+            $arg = $this->getArgumentByIndex($c);
 
-                // if last argument isArray(), append token to last argument
-            } elseif ($this->definition->hasArgument($c - 1) && $this->definition->getArgument($c - 1)->isArray()) {
-                $arg = $this->definition->getArgument($c - 1);
-                $this->parameters[$arg->getName()][] = $token;
-
-                // unexpected argument
+            if ($arg) {
+                $this->parsed[$arg->primaryName] = $arg->isArray ? [$token] : $token;
+            } elseif (($last = $this->getLastArgument()) && $last->isArray) {
+                $this->parsed[$last->primaryName][] = $token;
             } else {
-                $all = $this->definition->getArguments();
-                $symfonyCommandName = null;
-                if (($inputArgument = $all[$key = array_key_first($all)] ?? null) && 'command' === $inputArgument->getName()) {
-                    $symfonyCommandName = $this->parameters['command'] ?? null;
-                    unset($all[$key]);
-                }
-
-                if (\count($all)) {
-                    if ($symfonyCommandName) {
-                        $message = \sprintf('Too many arguments to "%s" command, expected arguments "%s".', $symfonyCommandName, implode('" "', array_keys($all)));
-                    } else {
-                        $message = \sprintf('Too many arguments, expected arguments "%s".', implode('" "', array_keys($all)));
-                    }
-                } elseif ($symfonyCommandName) {
-                    $message = \sprintf('No arguments expected for "%s" command, got "%s".', $symfonyCommandName, $token);
-                } else {
-                    $message = \sprintf('No arguments expected, got "%s".', $token);
-                }
-
-                throw new RuntimeException($message);
+                throw new \RuntimeException("Unknown argument \"$token\".");
             }
         }
     }
@@ -225,6 +215,12 @@ namespace Asika {
         public bool $acceptValue {
             get {
                 return $this->type->acceptValue();
+            }
+        }
+
+        public bool $isArray {
+            get {
+                return $this->type === ArgumentType::ARRAY;
             }
         }
 

@@ -1,22 +1,12 @@
 <?php
 
-include_once __DIR__ . '/../vendor/autoload.php';
+use Asika\SimpleConsole\ArgumentType;
 
-class Foo extends \Asika\SimpleConsole\Console
-{
-    protected $help = <<<HELP
-[Usage] test.php
+include_once __DIR__ . '/../src/SimpleConsole.php';
 
-[Options]
-    h | help    Show help info.
-HELP;
-}
+$parser = new \Asika\SimpleConsole\ArgumentParser();
+$parser->addParameter('name', ArgumentType::STRING, 'Your name');
+$parser->addParameter(['--foo', '-f'], ArgumentType::STRING, 'Foo option');
+$args = $parser->parse($argv);
 
-$app = new Foo;
-$app->execute(function ($app) {
-    $this->out('Hello');
-
-    $a = $this->in('Are you sure [Y/n]', true, true);
-
-    $this->out($a);
-});
+print_r($args);
