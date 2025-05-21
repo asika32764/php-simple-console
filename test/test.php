@@ -4,9 +4,11 @@ use Asika\SimpleConsole\ParameterType;
 
 include_once __DIR__ . '/../vendor/autoload.php';
 
-$command = new \Symfony\Component\Console\Command\Command();
-$command->addOption(
-    'foo',
-    'f',
-    \Symfony\Component\Console\Input\InputOption::VALUE_NEGATABLE
+$app = new \Asika\SimpleConsole\SimpleConsole();
+$app->execute(
+    main: function () use ($app) {
+        $app->mustExec(
+            'ls sddfsg',
+        );
+    }
 );

@@ -111,13 +111,6 @@ namespace Asika\SimpleConsole {
             //
         }
 
-        public function setBoolMapping(array $boolMapping): SimpleConsole
-        {
-            $this->boolMapping = $boolMapping;
-
-            return $this;
-        }
-
         protected function doExecute(): int|bool
         {
             return 0;
@@ -127,6 +120,7 @@ namespace Asika\SimpleConsole {
         {
             $argv = $argv ?? $_SERVER['argv'];
             $main ??= $this->doExecute(...);
+            $main->bindTo($this);
 
             try {
                 if (!$this->disableDefaultParameters) {
@@ -139,13 +133,10 @@ namespace Asika\SimpleConsole {
                 $this->params = $this->parser->parse($argv);
 
                 if (!$this->disableDefaultParameters) {
-                    if ($v = $this->get('verbosity')) {
-                        $this->verbosity = $v;
-                    }
+                    $this->verbosity = (int) $this->get('verbosity');
 
                     if ($this->get('help')) {
                         $this->showHelp();
-
                         return static::SUCCESS;
                     }
                 }
@@ -158,7 +149,7 @@ namespace Asika\SimpleConsole {
                     $exitCode = 255;
                 }
 
-                return $exitCode;
+                return (int) $exitCode;
             } catch (\Throwable $e) {
                 return $this->handleException($e);
             }
@@ -171,43 +162,24 @@ namespace Asika\SimpleConsole {
 
         public function showHelp(): void
         {
-            $help = ParameterDescriptor::describe($this->parser, 'command', $this->help());
-
-            $this->writeln($help);
+            $this->writeln(ParameterDescriptor::describe($this->parser, 'command', $this->help()));
         }
 
-        public function write(string $message): static
+        public function write(string $message, bool $err = false): static
         {
-            fwrite($this->stdout, $message);
-
+            fwrite($err ? $this->stderr : $this->stdout, $message);
             return $this;
         }
 
-        public function writeln(string $message = ''): static
+        public function writeln(string $message = '', bool $err = false): static
         {
-            $this->write($message . "\n");
-
+            $this->write($message . "\n", $err);
             return $this;
         }
 
-        public function newLine(int $lines = 1): static
+        public function newLine(int $lines = 1, bool $err = false): static
         {
-            $this->write(str_repeat("\n", $lines));
-
-            return $this;
-        }
-
-        public function writeErr(string $message): static
-        {
-            fwrite($this->stderr, $message);
-
-            return $this;
-        }
-
-        public function writelnErr(string $message = ''): static
-        {
-            $this->writeErr($message . "\n");
-
+            $this->write(str_repeat("\n", $lines), $err);
             return $this;
         }
 
@@ -247,21 +219,67 @@ namespace Asika\SimpleConsole {
             return null;
         }
 
+        public function exec(string $cmd, ?\Closure $output = null): int
+        {
+            $this->writeln('>> ' . $cmd);
+
+            $descriptorspec = [
+                0 => ["pipe", "r"],  // stdin
+                1 => ["pipe", "w"],  // stdout
+                2 => ["pipe", "w"]   // stderr
+            ];
+
+            if ($process = proc_open($cmd, $descriptorspec, $pipes)) {
+                while (($out = fgets($pipes[1])) || $err = fgets($pipes[2])) {
+                    if (isset($out[0])) {
+                        if ($output) {
+                            $output($out, false);
+                        } else {
+                            $this->write($out, false);
+                        }
+                    }
+
+                    if (isset($err[0])) {
+                        if ($output) {
+                            $output($err, true);
+                        } else {
+                            $this->write($err, true);
+                        }
+                    }
+                }
+
+                return proc_close($process);
+            }
+
+            return 255;
+        }
+
+        public function mustExec(string $cmd, ?\Closure $output = null): int
+        {
+            $result = $this->exec($cmd, $output);
+
+            if ($result !== 0) {
+                throw new \RuntimeException('Command "' . $cmd . '" failed with code ' . $result);
+            }
+
+            return $result;
+        }
+
         protected function handleException(\Throwable $e): int
         {
             $v = $this->verbosity;
 
             if ($e instanceof InvalidParameterException) {
-                $this->writelnErr('[Warning] ' . $e->getMessage())
-                    ->writelnErr()
-                    ->writelnErr('HELP');
+                $this->writeln('[Warning] ' . $e->getMessage(), true)
+                    ->newLine(err: true)
+                    ->writeln('HELP', true);
             } else {
-                $this->writelnErr('[Error] ' . $e->getMessage());
+                $this->writeln('[Error] ' . $e->getMessage(), true);
             }
 
             if ($v > 0) {
-                $this->writelnErr('[Backtrace]:')
-                    ->writeErr($e->getTraceAsString());
+                $this->writeln('[Backtrace]:', true)
+                    ->writeln($e->getTraceAsString(), true);
             }
 
             $code = $e->getCode();
@@ -344,7 +362,7 @@ namespace Asika\SimpleConsole {
 
                 foreach ($name as $n) {
                     if (!str_starts_with($n, '-')) {
-                        throw new \RuntimeException('Argument name cannot contains "|" sign.');
+                        throw new \InvalidArgumentException('Argument name cannot contains "|" sign.');
                     }
                 }
             }
@@ -353,7 +371,7 @@ namespace Asika\SimpleConsole {
 
             foreach ((array) $parameter->name as $n) {
                 if (in_array($n, $this->existsNames, true)) {
-                    throw new \RuntimeException('Duplicate parameter name "' . $n . '"');
+                    throw new \InvalidArgumentException('Duplicate parameter name "' . $n . '"');
                 }
             }
 
@@ -506,11 +524,7 @@ namespace Asika\SimpleConsole {
 
         private function parseArgument(string $token): void
         {
-            $c = $this->currentArgument;
-
-            $arg = $this->getArgumentByIndex($c);
-
-            if ($arg) {
+            if ($arg = $this->getArgumentByIndex($this->currentArgument)) {
                 $this->values[$arg->primaryName] = $arg->isArray ? [$token] : $token;
             } elseif (($last = $this->getLastArgument()) && $last->isArray) {
                 $this->values[$last->primaryName][] = $token;
@@ -544,9 +558,8 @@ namespace Asika\SimpleConsole {
                 throw new InvalidParameterException('Option "' . $option->primaryName . '" does not accept value.');
             }
 
+            // Try get option value from next token
             if (\in_array($value, ['', null], true) && $option->acceptValue && \count($this->tokens)) {
-                // if option accepts an optional or mandatory argument
-                // let's see if there is one provided
                 $next = array_shift($this->tokens);
 
                 if ((isset($next[0]) && '-' !== $next[0]) || \in_array($next, ['', null], true)) {
@@ -678,7 +691,7 @@ namespace Asika\SimpleConsole {
             if (is_array($this->name)) {
                 foreach ($this->name as $i => $n) {
                     if (!str_starts_with($n, '--') && strlen($n) > 2) {
-                        throw new InvalidParameterException('Invalid option name "' . $n . '"');
+                        throw new \InvalidArgumentException('Invalid option name "' . $n . '"');
                     }
 
                     $this->name[$i] = ltrim($n, '-');
@@ -686,25 +699,25 @@ namespace Asika\SimpleConsole {
             }
 
             if ($this->isArray && !is_array($this->defaultValue)) {
-                throw new InvalidParameterException("Default value of \"{$this->primaryName}\" must be an array.");
+                throw new \InvalidArgumentException("Default value of \"{$this->primaryName}\" must be an array.");
             }
 
             if ($this->isArg) {
                 if ($this->negatable) {
-                    throw new InvalidParameterException(
+                    throw new \InvalidArgumentException(
                         "Argument \"{$this->primaryName}\" cannot be negatable."
                     );
                 }
             } else {
                 if ($this->negatable && $this->required) {
-                    throw new InvalidParameterException(
+                    throw new \InvalidArgumentException(
                         "Negatable option \"{$this->primaryName}\" cannot be required."
                     );
                 }
             }
 
             if ($this->required && $this->default !== null) {
-                throw new InvalidParameterException(
+                throw new \InvalidArgumentException(
                     "Default value of \"{$this->primaryName}\" cannot be set when required is true."
                 );
             }
@@ -749,6 +762,7 @@ namespace Asika\SimpleConsole {
                             "Invalid value type for \"{$this->primaryName}\". Expected int."
                         );
                     }
+                    break;
                 case ParameterType::FLOAT:
                     if (!is_numeric($value) || ((string) (float) $value) !== $value) {
                         throw new InvalidParameterException(
@@ -992,6 +1006,5 @@ namespace Asika\SimpleConsole {
 
     class InvalidParameterException extends \RuntimeException
     {
-        //
     }
 }
