@@ -56,7 +56,6 @@ namespace Asika\SimpleConsole {
         }
 
         public function __construct(
-            ?array $argv = null,
             public $stdout = STDOUT,
             public $stderr = STDERR,
             public $stdin = STDIN,
