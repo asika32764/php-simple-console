@@ -3,8 +3,195 @@
 declare(strict_types=1);
 
 namespace Asika\SimpleConsole {
-    class SimpleConsole
+
+    class SimpleConsole implements \ArrayAccess
     {
+        public const ArgumentType STRING = ArgumentType::STRING;
+
+        public const ArgumentType INT = ArgumentType::INT;
+
+        public const ArgumentType NUMERIC = ArgumentType::NUMERIC;
+
+        public const ArgumentType FLOAT = ArgumentType::FLOAT;
+
+        public const ArgumentType BOOLEAN = ArgumentType::BOOLEAN;
+
+        public const ArgumentType ARRAY = ArgumentType::ARRAY;
+
+        public const int SUCCESS = 0;
+        public const int FAILURE = 255;
+
+        public int $verbosity = 0;
+
+        public array $params = [];
+
+        protected ArgvParser $parser;
+
+        public static function createArgvParser(\Closure|null $configure = null): ArgvParser
+        {
+            $parser = new ArgvParser();
+
+            if ($configure) {
+                $configure($parser);
+            }
+
+            return $parser;
+        }
+
+        public static function parseArgv(\Closure|null $configure = null, ?array $argv = null): array
+        {
+            $argv ??= $_SERVER['argv'];
+
+            return static::createArgvParser($configure)->parse($argv);
+        }
+
+        public function __construct(
+            ?array $argv = null,
+            public $stdout = STDOUT,
+            public $stderr = STDERR,
+            public $stdin = STDIN,
+        ) {
+            $this->parser = static::createArgvParser();
+        }
+
+        public function addParameter(
+            string|array $name,
+            ArgumentType $type,
+            string $description = '',
+            bool $required = false,
+            mixed $default = null,
+            bool $negatable = false,
+        ): Parameter {
+            return $this->parser->addParameter(
+                $name,
+                $type,
+                $description,
+                $required,
+                $default,
+                $negatable,
+            );
+        }
+
+        public function get(string $name, mixed $default = null): mixed
+        {
+            return $this->params[$name] ?? $default;
+        }
+
+        protected function configure(): void
+        {
+            //
+        }
+
+        protected function doExecute(): int
+        {
+            return 0;
+        }
+
+        public function execute(?array $argv = null, ?\Closure $main = null): int
+        {
+            $argv = $argv ?? $_SERVER['argv'];
+            $main ??= $this->doExecute(...);
+
+            try {
+                $this->configure();
+
+                $this->params = $this->parser->parse($argv);
+
+                $exitCode = $main($this);
+
+                if ($exitCode === true || $exitCode === null) {
+                    $exitCode = 0;
+                } elseif ($exitCode === false) {
+                    $exitCode = 255;
+                }
+
+                return $exitCode;
+            } catch (\Throwable $e) {
+                return $this->handleException($e);
+            }
+        }
+
+        public function write(string $message): static
+        {
+            fwrite($this->stdout, $message);
+
+            return $this;
+        }
+
+        public function writeln(string $message = ''): static
+        {
+            $this->write($message . "\n");
+
+            return $this;
+        }
+
+        public function newLine(int $lines = 1): static
+        {
+            $this->write(str_repeat("\n", $lines));
+
+            return $this;
+        }
+
+        public function writeErr(string $message): static
+        {
+            fwrite($this->stderr, $message);
+
+            return $this;
+        }
+
+        public function writelnErr(string $message = ''): static
+        {
+            $this->writeErr($message . "\n");
+
+            return $this;
+        }
+
+        public function in(): string
+        {
+            return rtrim(fread(STDIN, 8192), "\n\r");
+        }
+
+        protected function handleException(\Throwable $e): int
+        {
+            $v = $this->verbosity;
+
+            if ($e instanceof InvalidParameterException) {
+                $this->writelnErr('[Warning] ' . $e->getMessage())
+                    ->writelnErr()
+                    ->writelnErr('HELP');
+            } else {
+                $this->writelnErr('[Error] ' . $e->getMessage());
+            }
+
+            if ($v > 0) {
+                $this->writelnErr('[Backtrace]:')
+                    ->writeErr($e->getTraceAsString());
+            }
+
+            $code = $e->getCode();
+
+            return $code === 0 ? 255 : $code;
+        }
+
+        public function offsetExists(mixed $offset): bool
+        {
+            return array_key_exists($offset, $this->params);
+        }
+
+        public function offsetGet(mixed $offset): mixed
+        {
+            return $this->params[$offset] ?? null;
+        }
+
+        public function offsetSet(mixed $offset, mixed $value): void
+        {
+            throw new \BadMethodCallException('Cannot set params.');
+        }
+
+        public function offsetUnset(mixed $offset): void
+        {
+            throw new \BadMethodCallException('Cannot unset params.');
+        }
     }
 
     class ArgvParser
@@ -102,7 +289,8 @@ namespace Asika\SimpleConsole {
 
         public function getOption(string $name): ?Parameter
         {
-            return array_find(iterator_to_array($this->options), static fn(Parameter $option) => $option->hasName($name));
+            return array_find(iterator_to_array($this->options), static fn(Parameter $option) => $option->hasName($name)
+            );
         }
 
         public function mustGetOption(string $name): Parameter
@@ -133,14 +321,18 @@ namespace Asika\SimpleConsole {
             foreach ($this->parameters as $parameter) {
                 if (!array_key_exists($parameter->primaryName, $this->values)) {
                     if ($parameter->required) {
-                        throw new InvalidParameterException("Required parameter \"{$parameter->primaryName}\" is missing.");
+                        throw new InvalidParameterException(
+                            "Required parameter \"{$parameter->primaryName}\" is missing."
+                        );
                     }
 
                     $this->values[$parameter->primaryName] = $parameter->defaultValue ?? false;
                 } else {
                     $parameter->validate($this->values[$parameter->primaryName]);
 
-                    $this->values[$parameter->primaryName] = $parameter->castValue($this->values[$parameter->primaryName]);
+                    $this->values[$parameter->primaryName] = $parameter->castValue(
+                        $this->values[$parameter->primaryName]
+                    );
                 }
             }
 
@@ -243,6 +435,7 @@ namespace Asika\SimpleConsole {
                     if ($option->isBoolean && $option->negatable) {
                         $this->values[$option->primaryName] = false;
                     }
+
                     return;
                 }
 
@@ -275,6 +468,9 @@ namespace Asika\SimpleConsole {
 
             if ($option->isArray) {
                 $this->values[$option->primaryName][] = $value;
+            } elseif ($option->isLevel) {
+                $this->values[$option->primaryName] ??= 0;
+                $this->values[$option->primaryName]++;
             } else {
                 $this->values[$option->primaryName] = $value;
             }
@@ -305,9 +501,29 @@ namespace Asika\SimpleConsole {
             }
         }
 
+        public string $nameTitle {
+            get {
+                if (is_string($this->name)) {
+                    return $this->name;
+                }
+
+                $ns = [];
+
+                foreach ($this->name as $n) {
+                    if (strlen($n) === 1) {
+                        $ns[] = '-' . $n;
+                    } else {
+                        $ns[] = '--' . $n;
+                    }
+                }
+
+                return implode('|', $ns);
+            }
+        }
+
         public bool $acceptValue {
             get {
-                return !$this->type->isBoolean();
+                return !$this->isBoolean && !$this->isLevel;
             }
         }
 
@@ -317,9 +533,15 @@ namespace Asika\SimpleConsole {
             }
         }
 
+        public bool $isLevel {
+            get {
+                return $this->type === ArgumentType::LEVEL;
+            }
+        }
+
         public bool $isBoolean {
             get {
-                return $this->type->isBoolean();
+                return $this->type === ArgumentType::BOOLEAN;
             }
         }
 
@@ -327,6 +549,10 @@ namespace Asika\SimpleConsole {
             get {
                 if ($this->isArray) {
                     return $this->default ?? [];
+                }
+
+                if ($this->isLevel) {
+                    return $this->default ?? 0;
                 }
 
                 return $this->default;
@@ -360,7 +586,9 @@ namespace Asika\SimpleConsole {
             }
 
             if ($this->required && $this->default !== null) {
-                throw new InvalidParameterException("Default value of \"{$this->primaryName}\" cannot be set when required is true.");
+                throw new InvalidParameterException(
+                    "Default value of \"{$this->primaryName}\" cannot be set when required is true."
+                );
             }
         }
 
@@ -378,7 +606,7 @@ namespace Asika\SimpleConsole {
         public function castValue(mixed $value): mixed
         {
             return match ($this->type) {
-                ArgumentType::INT => (int) $value,
+                ArgumentType::INT, ArgumentType::LEVEL => (int) $value,
                 ArgumentType::NUMERIC, ArgumentType::FLOAT => (float) $value,
                 ArgumentType::BOOLEAN => (bool) $value,
                 ArgumentType::ARRAY => (array) $value,
@@ -399,31 +627,53 @@ namespace Asika\SimpleConsole {
             switch ($this->type) {
                 case ArgumentType::INT:
                     if (!is_numeric($value) || ((string) (int) $value) !== $value) {
-                        throw new InvalidParameterException("Invalid value type for \"{$this->primaryName}\". Expected int.");
+                        throw new InvalidParameterException(
+                            "Invalid value type for \"{$this->primaryName}\". Expected int."
+                        );
                     }
                 case ArgumentType::FLOAT:
                     if (!is_numeric($value) || ((string) (float) $value) !== $value) {
-                        throw new InvalidParameterException("Invalid value type for \"{$this->primaryName}\". Expected float.");
+                        throw new InvalidParameterException(
+                            "Invalid value type for \"{$this->primaryName}\". Expected float."
+                        );
                     }
                     break;
                 case ArgumentType::NUMERIC:
                     if (!is_numeric($value)) {
-                        throw new InvalidParameterException("Invalid value type for \"{$this->primaryName}\". Expected numeric.");
+                        throw new InvalidParameterException(
+                            "Invalid value type for \"{$this->primaryName}\". Expected numeric."
+                        );
                     }
                     break;
 
                 case ArgumentType::BOOLEAN:
                     if (!is_bool($value) && $value !== '1' && $value !== '0') {
-                        throw new InvalidParameterException("Invalid value type for \"{$this->primaryName}\". Expected boolean or 1/0.");
+                        throw new InvalidParameterException(
+                            "Invalid value type for \"{$this->primaryName}\". Expected boolean or 1/0."
+                        );
                     }
                     break;
 
                 case ArgumentType::ARRAY:
                     if (!is_array($value)) {
-                        throw new InvalidParameterException("Invalid value type for \"{$this->primaryName}\". Expected array.");
+                        throw new InvalidParameterException(
+                            "Invalid value type for \"{$this->primaryName}\". Expected array."
+                        );
                     }
                     break;
             }
+        }
+    }
+
+    class ParameterDescriptor
+    {
+        public function __construct(protected ArgvParser $parser)
+        {
+        }
+
+        public static function line(Parameter $parameter, int $colWidth = 10)
+        {
+
         }
     }
 
@@ -434,41 +684,8 @@ namespace Asika\SimpleConsole {
         case NUMERIC;
         case FLOAT;
         case BOOLEAN;
+        case LEVEL;
         case ARRAY;
-
-        public function acceptValue(): bool
-        {
-            return in_array(
-                $this,
-                [
-                    self::STRING,
-                    self::INT,
-                    self::FLOAT,
-                    self::NUMERIC,
-                    self::BOOLEAN,
-                    self::ARRAY,
-                ],
-                true,
-            );
-        }
-
-        public function valueRequired(): bool
-        {
-            return in_array(
-                $this,
-                [
-                    self::STRING,
-                    self::NUMERIC,
-                    self::ARRAY,
-                ],
-                true,
-            );
-        }
-
-        public function isBoolean(): bool
-        {
-            return $this === self::BOOLEAN;
-        }
     }
 
     class InvalidParameterException extends \RuntimeException

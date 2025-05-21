@@ -300,4 +300,47 @@ class ArgvParserTest extends TestCase
             $args
         );
     }
+
+    public function testVerbosity()
+    {
+        $parser = new ArgvParser();
+        $parser->addParameter('name', ArgumentType::STRING);
+        $parser->addParameter('-v', ArgumentType::LEVEL);
+
+        $args = $parser->parse(
+            ['command', 'Hello']
+        );
+
+        self::assertSame(
+            [
+                'name' => 'Hello',
+                'v' => 0,
+            ],
+            $args
+        );
+
+        $args = $parser->parse(
+            ['command', 'Hello', '-v']
+        );
+
+        self::assertSame(
+            [
+                'name' => 'Hello',
+                'v' => 1,
+            ],
+            $args
+        );
+
+        $args = $parser->parse(
+            ['command', 'Hello', '-vvv']
+        );
+
+        self::assertSame(
+            [
+                'name' => 'Hello',
+                'v' => 3,
+            ],
+            $args
+        );
+    }
 }
