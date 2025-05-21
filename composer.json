@@ -10,16 +10,19 @@
     ],
     "minimum-stability": "beta",
     "require": {
-        "php": ">=8.4"
+        "php": ">=8.4",
+        "windwalker/test": "^4.1",
+        "windwalker/utilities": "^4.1"
     },
     "autoload": {
-        "psr-4": {
-            "Asika\\SimpleConsole\\": "src/"
-        }
+        "files": [
+            "src/SimpleConsole.php"
+        ]
     },
     "require-dev": {
         "symfony/console": "^7.3@beta",
         "symfony/process": "^7.3@beta",
-        "phpunit/phpunit": "^12.1"
+        "phpunit/phpunit": "^12.1",
+        "symfony/var-dumper": "^7.3@beta"
     }
 }
