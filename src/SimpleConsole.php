@@ -28,6 +28,11 @@ namespace Asika\SimpleConsole {
 
         public array $params = [];
 
+        public array $boolMapping = [
+            ['n', 'no', 'false', 0, '0'],
+            ['y', 'yes', 'true', 1, '1'],
+        ];
+
         public bool $disableDefaultParameters = false;
 
         protected ArgvParser $parser;
@@ -106,7 +111,14 @@ namespace Asika\SimpleConsole {
             //
         }
 
-        protected function doExecute(): int
+        public function setBoolMapping(array $boolMapping): SimpleConsole
+        {
+            $this->boolMapping = $boolMapping;
+
+            return $this;
+        }
+
+        protected function doExecute(): int|bool
         {
             return 0;
         }
@@ -202,6 +214,37 @@ namespace Asika\SimpleConsole {
         public function in(): string
         {
             return rtrim(fread(STDIN, 8192), "\n\r");
+        }
+
+        public function ask(string $question = '', string $default = ''): string
+        {
+            $this->write($question);
+
+            $in = rtrim(fread(STDIN, 8192), "\n\r");
+
+            return $in === '' ? $default : $in;
+        }
+
+        public function askConfirm(string $question = '', string $default = ''): bool
+        {
+            return (bool) $this->mapBoolean($this->ask($question, $default));
+        }
+
+        public function mapBoolean($in): bool|null
+        {
+            $in = strtolower((string) $in);
+
+            [$falsy, $truly] = $this->boolMapping;
+
+            if (in_array($in, $falsy, true)) {
+                return false;
+            }
+
+            if (in_array($in, $truly, true)) {
+                return true;
+            }
+
+            return null;
         }
 
         protected function handleException(\Throwable $e): int
