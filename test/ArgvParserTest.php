@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Asika\SimpleConsole\Test;
 
-use Asika\SimpleConsole\ArgumentType;
+use Asika\SimpleConsole\ParameterType;
 use Asika\SimpleConsole\ArgvParser;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -24,13 +24,13 @@ class ArgvParserTest extends TestCase
         }
 
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('steps', ArgumentType::INT);
-        $parser->addParameter('--lat|-l', ArgumentType::FLOAT);
-        $parser->addParameter('--user|-u', ArgumentType::STRING);
-        $parser->addParameter('--price|-p', ArgumentType::NUMERIC);
-        $parser->addParameter('--muted|-m', ArgumentType::BOOLEAN);
-        $parser->addParameter('--quite|-q', ArgumentType::BOOLEAN);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('steps', ParameterType::INT);
+        $parser->addParameter('--lat|-l', ParameterType::FLOAT);
+        $parser->addParameter('--user|-u', ParameterType::STRING);
+        $parser->addParameter('--price|-p', ParameterType::NUMERIC);
+        $parser->addParameter('--muted|-m', ParameterType::BOOLEAN);
+        $parser->addParameter('--quite|-q', ParameterType::BOOLEAN);
 
         if (is_string($cmd)) {
             $cmd = explode(' ', $cmd);
@@ -148,8 +148,8 @@ class ArgvParserTest extends TestCase
     public function testArgumentRequired(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('steps', ArgumentType::INT, required: true);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('steps', ParameterType::INT, required: true);
 
         $args = $parser->parse(
             ['command', 'Hello', '200']
@@ -157,7 +157,7 @@ class ArgvParserTest extends TestCase
 
         assertEquals(200, $args['steps']);
 
-        $this->expectExceptionMessage('Required parameter "steps" is missing.');
+        $this->expectExceptionMessage('Required argument "steps" is missing.');
 
         $parser->parse(
             ['command', 'Hello']
@@ -167,9 +167,9 @@ class ArgvParserTest extends TestCase
     public function testOptionRequired(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('steps', ArgumentType::INT);
-        $parser->addParameter('--user|-u', ArgumentType::STRING, required: true);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('steps', ParameterType::INT);
+        $parser->addParameter('--user|-u', ParameterType::STRING, required: true);
 
         $args = $parser->parse(
             ['command', 'Hello', '200', '--user', 'admin']
@@ -187,23 +187,30 @@ class ArgvParserTest extends TestCase
     public function testOptionRequiredAndNotProvided(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('steps', ArgumentType::INT);
-        $parser->addParameter('--user|-u', ArgumentType::STRING, required: true);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('steps', ParameterType::INT);
+        $parser->addParameter('--user|-u', ParameterType::STRING, required: true);
 
-        $this->expectExceptionMessage('Required parameter "user" is missing.');
-
-        $parser->parse(
+        $args = $parser->parse(
             ['command', 'Hello', '200']
+        );
+
+        self::assertSame(
+            [
+                'name' => 'Hello',
+                'steps' => 200,
+                'user' => false,
+            ],
+            $args
         );
     }
 
     public function testArgumentArray(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('steps', ArgumentType::ARRAY);
-        $parser->addParameter('--user|-u', ArgumentType::STRING);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('steps', ParameterType::ARRAY);
+        $parser->addParameter('--user|-u', ParameterType::STRING);
 
         $args = $parser->parse(
             ['command', 'Hello', 'a', '-u', 'admin', 'b', 'c']
@@ -222,9 +229,9 @@ class ArgvParserTest extends TestCase
     public function testOptionArray(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('--steps', ArgumentType::ARRAY);
-        $parser->addParameter('--user|-u', ArgumentType::STRING);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('--steps', ParameterType::ARRAY);
+        $parser->addParameter('--user|-u', ParameterType::STRING);
 
         $args = $parser->parse(
             ['command', 'Hello', '--steps=a', '-u', 'admin', '--steps=b', '--steps', 'c']
@@ -243,8 +250,8 @@ class ArgvParserTest extends TestCase
     public function testBooleanNegative(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('--muted', ArgumentType::BOOLEAN, default: true, negatable: true);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('--muted', ParameterType::BOOLEAN, default: true, negatable: true);
 
         $args = $parser->parse(
             ['command', 'Hello']
@@ -274,9 +281,9 @@ class ArgvParserTest extends TestCase
     public function testEscapedArguments(): void
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('cmd', ArgumentType::ARRAY);
-        $parser->addParameter('--muted', ArgumentType::BOOLEAN);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('cmd', ParameterType::ARRAY);
+        $parser->addParameter('--muted', ParameterType::BOOLEAN);
 
         $args = $parser->parse(
             ['command', 'Hello', '--muted', '--', 'php', 'console', 'make:entity', 'FooBar', '--path', 'abc', '--dir', 'efg']
@@ -304,8 +311,8 @@ class ArgvParserTest extends TestCase
     public function testVerbosity()
     {
         $parser = new ArgvParser();
-        $parser->addParameter('name', ArgumentType::STRING);
-        $parser->addParameter('-v', ArgumentType::LEVEL);
+        $parser->addParameter('name', ParameterType::STRING);
+        $parser->addParameter('-v', ParameterType::LEVEL);
 
         $args = $parser->parse(
             ['command', 'Hello']

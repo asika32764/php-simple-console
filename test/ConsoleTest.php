@@ -86,4 +86,28 @@ class ConsoleTest extends TestCase
             $parsed
         );
     }
+
+    public function testHelp()
+    {
+        $app = new SimpleConsole();
+        $app->addParameter('name', $app::STRING, 'Name Description', required: true);
+        $app->addParameter('steps', $app::NUMERIC, 'Steps Description', default: 20);
+        $app->addParameter('--foo|-f', $app::STRING, 'Foo Description', required: true);
+        $app->addParameter('--bar|-b|-c', $app::STRING, 'Bar Description', default: 'BAR');
+        $app->addParameter('--muted|-m', $app::STRING, 'Muted Description', negatable: true);
+
+        $argv = [
+            'command',
+            'Hello',
+            '--foo',
+            'QWQ',
+        ];
+
+        $app->execute(
+            $argv,
+            function () use ($app) {
+                $app->showHelp();
+            }
+        );
+    }
 }

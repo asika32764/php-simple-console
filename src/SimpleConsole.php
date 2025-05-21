@@ -6,19 +6,20 @@ namespace Asika\SimpleConsole {
 
     class SimpleConsole implements \ArrayAccess
     {
-        public const ArgumentType STRING = ArgumentType::STRING;
+        public const ParameterType STRING = ParameterType::STRING;
 
-        public const ArgumentType INT = ArgumentType::INT;
+        public const ParameterType INT = ParameterType::INT;
 
-        public const ArgumentType NUMERIC = ArgumentType::NUMERIC;
+        public const ParameterType NUMERIC = ParameterType::NUMERIC;
 
-        public const ArgumentType FLOAT = ArgumentType::FLOAT;
+        public const ParameterType FLOAT = ParameterType::FLOAT;
 
-        public const ArgumentType BOOLEAN = ArgumentType::BOOLEAN;
+        public const ParameterType BOOLEAN = ParameterType::BOOLEAN;
 
-        public const ArgumentType ARRAY = ArgumentType::ARRAY;
+        public const ParameterType ARRAY = ParameterType::ARRAY;
 
         public const int SUCCESS = 0;
+
         public const int FAILURE = 255;
 
         public int $verbosity = 0;
@@ -56,7 +57,7 @@ namespace Asika\SimpleConsole {
 
         public function addParameter(
             string|array $name,
-            ArgumentType $type,
+            ParameterType $type,
             string $description = '',
             bool $required = false,
             mixed $default = null,
@@ -109,6 +110,18 @@ namespace Asika\SimpleConsole {
             } catch (\Throwable $e) {
                 return $this->handleException($e);
             }
+        }
+
+        protected function help(): string
+        {
+            return '';
+        }
+
+        public function showHelp(): void
+        {
+            $help = ParameterDescriptor::describe($this->parser, 'command', $this->help());
+
+            $this->writeln($help);
         }
 
         public function write(string $message): static
@@ -239,7 +252,7 @@ namespace Asika\SimpleConsole {
 
         public function addParameter(
             string|array $name,
-            ArgumentType $type,
+            ParameterType $type,
             string $description = '',
             bool $required = false,
             mixed $default = null,
@@ -320,9 +333,9 @@ namespace Asika\SimpleConsole {
 
             foreach ($this->parameters as $parameter) {
                 if (!array_key_exists($parameter->primaryName, $this->values)) {
-                    if ($parameter->required) {
+                    if ($parameter->isArg && $parameter->required) {
                         throw new InvalidParameterException(
-                            "Required parameter \"{$parameter->primaryName}\" is missing."
+                            "Required argument \"{$parameter->primaryName}\" is missing."
                         );
                     }
 
@@ -501,23 +514,35 @@ namespace Asika\SimpleConsole {
             }
         }
 
-        public string $nameTitle {
+        public string $synopsis {
             get {
                 if (is_string($this->name)) {
                     return $this->name;
                 }
 
-                $ns = [];
+                $shorts = [];
+                $fulls = [];
 
                 foreach ($this->name as $n) {
                     if (strlen($n) === 1) {
-                        $ns[] = '-' . $n;
+                        $shorts[] = '-' . $n;
                     } else {
-                        $ns[] = '--' . $n;
+                        $fulls[] = '--' . $n;
                     }
                 }
 
-                return implode('|', $ns);
+                if ($this->negatable) {
+                    $fulls[] = '--no-' . $this->primaryName;
+                }
+
+                $ns = array_filter(
+                    [
+                        implode('|', $shorts),
+                        implode('|', $fulls),
+                    ]
+                );
+
+                return implode(', ', $ns);
             }
         }
 
@@ -529,19 +554,19 @@ namespace Asika\SimpleConsole {
 
         public bool $isArray {
             get {
-                return $this->type === ArgumentType::ARRAY;
+                return $this->type === ParameterType::ARRAY;
             }
         }
 
         public bool $isLevel {
             get {
-                return $this->type === ArgumentType::LEVEL;
+                return $this->type === ParameterType::LEVEL;
             }
         }
 
         public bool $isBoolean {
             get {
-                return $this->type === ArgumentType::BOOLEAN;
+                return $this->type === ParameterType::BOOLEAN;
             }
         }
 
@@ -561,7 +586,7 @@ namespace Asika\SimpleConsole {
 
         public function __construct(
             public string|array $name,
-            public ArgumentType $type,
+            public ParameterType $type,
             public string $description = '',
             public bool $required = false,
             public mixed $default = null,
@@ -585,6 +610,20 @@ namespace Asika\SimpleConsole {
                 throw new InvalidParameterException("Default value of \"{$this->primaryName}\" must be an array.");
             }
 
+            if ($this->isArg) {
+                if ($this->negatable) {
+                    throw new InvalidParameterException(
+                        "Argument \"{$this->primaryName}\" cannot be negatable."
+                    );
+                }
+            } else {
+                if ($this->negatable && $this->required) {
+                    throw new InvalidParameterException(
+                        "Negatable option \"{$this->primaryName}\" cannot be required."
+                    );
+                }
+            }
+
             if ($this->required && $this->default !== null) {
                 throw new InvalidParameterException(
                     "Default value of \"{$this->primaryName}\" cannot be set when required is true."
@@ -606,10 +645,10 @@ namespace Asika\SimpleConsole {
         public function castValue(mixed $value): mixed
         {
             return match ($this->type) {
-                ArgumentType::INT, ArgumentType::LEVEL => (int) $value,
-                ArgumentType::NUMERIC, ArgumentType::FLOAT => (float) $value,
-                ArgumentType::BOOLEAN => (bool) $value,
-                ArgumentType::ARRAY => (array) $value,
+                ParameterType::INT, ParameterType::LEVEL => (int) $value,
+                ParameterType::NUMERIC, ParameterType::FLOAT => (float) $value,
+                ParameterType::BOOLEAN => (bool) $value,
+                ParameterType::ARRAY => (array) $value,
                 default => $value,
             };
         }
@@ -625,20 +664,20 @@ namespace Asika\SimpleConsole {
             }
 
             switch ($this->type) {
-                case ArgumentType::INT:
+                case ParameterType::INT:
                     if (!is_numeric($value) || ((string) (int) $value) !== $value) {
                         throw new InvalidParameterException(
                             "Invalid value type for \"{$this->primaryName}\". Expected int."
                         );
                     }
-                case ArgumentType::FLOAT:
+                case ParameterType::FLOAT:
                     if (!is_numeric($value) || ((string) (float) $value) !== $value) {
                         throw new InvalidParameterException(
                             "Invalid value type for \"{$this->primaryName}\". Expected float."
                         );
                     }
                     break;
-                case ArgumentType::NUMERIC:
+                case ParameterType::NUMERIC:
                     if (!is_numeric($value)) {
                         throw new InvalidParameterException(
                             "Invalid value type for \"{$this->primaryName}\". Expected numeric."
@@ -646,7 +685,7 @@ namespace Asika\SimpleConsole {
                     }
                     break;
 
-                case ArgumentType::BOOLEAN:
+                case ParameterType::BOOLEAN:
                     if (!is_bool($value) && $value !== '1' && $value !== '0') {
                         throw new InvalidParameterException(
                             "Invalid value type for \"{$this->primaryName}\". Expected boolean or 1/0."
@@ -654,7 +693,7 @@ namespace Asika\SimpleConsole {
                     }
                     break;
 
-                case ArgumentType::ARRAY:
+                case ParameterType::ARRAY:
                     if (!is_array($value)) {
                         throw new InvalidParameterException(
                             "Invalid value type for \"{$this->primaryName}\". Expected array."
@@ -667,17 +706,220 @@ namespace Asika\SimpleConsole {
 
     class ParameterDescriptor
     {
-        public function __construct(protected ArgvParser $parser)
+        public static function describe(ArgvParser $parser, string $commandName, string $help = ''): string
         {
+            $lines = [
+                'Usage:'
+            ];
+
+            $lines[] = '  ' . $commandName . ' ' . static::synopsis($parser, true);
+
+            $arguments = iterator_to_array($parser->arguments);
+            $options = iterator_to_array($parser->options);
+
+            if (count($arguments)) {
+                $lines[] = '';
+                $lines[] = 'Arguments:';
+                $maxColWidth = 0;
+
+                /** @var Parameter $argument */
+                foreach ($arguments as $argument) {
+                    $maxColWidth = max($maxColWidth, strlen($argument->synopsis));
+                }
+
+                foreach ($arguments as $argument) {
+                    $lines[] = '  ' . static::line($argument, $maxColWidth + 2);
+                }
+            }
+
+            if (count($options)) {
+                $lines[] = '';
+                $lines[] = 'Options:';
+                $maxColWidth = 0;
+
+                /** @var Parameter $option */
+                foreach ($options as $option) {
+                    $maxColWidth = max($maxColWidth, strlen($option->synopsis));
+                }
+
+                foreach ($options as $option) {
+                    $lines[] = '  ' . static::line($option, $maxColWidth + 2);
+                }
+            }
+
+            if ($help) {
+                $lines[] = '';
+                $lines[] = 'Help:';
+            }
+
+            return implode("\n", $lines);
         }
 
-        public static function line(Parameter $parameter, int $colWidth = 10)
+        public static function line(Parameter $parameter, int &$maxWidth = 0): string
         {
+            if ($parameter->isArg) {
+                return static::lineArgument($parameter, $maxWidth);
+            }
 
+            return static::lineOption($parameter, $maxWidth);
+        }
+
+        public static function lineArgument(Parameter $parameter, int &$maxWidth = 0): string
+        {
+            if (!static::defaultIsEmpty($parameter)) {
+                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
+            } else {
+                $default = '';
+            }
+
+            $spacing = max(0, $maxWidth - strlen($parameter->synopsis)) ?: 2;
+
+            return $parameter->synopsis . str_repeat(' ', $spacing) . $parameter->description . $default;
+        }
+
+        public static function lineOption(Parameter $parameter, int &$maxWidth = 0): string
+        {
+            if (($parameter->acceptValue || $parameter->negatable) && !static::defaultIsEmpty($parameter)) {
+                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
+            } else {
+                $default = '';
+            }
+
+            $value = '';
+            if ($parameter->acceptValue) {
+                $value = '=' . strtoupper($parameter->primaryName);
+
+                if (!$parameter->required) {
+                    $value = '[' . $value . ']';
+                }
+            }
+
+            $maxWidth = max(0, $maxWidth - strlen($parameter->primaryName)) ?: 2;
+            $synopsis = $parameter->synopsis . ($parameter->acceptValue ? $value : '');
+
+            return $synopsis . '@@spacing@@' . $parameter->description . $default
+                . ($parameter->isArray ? ' (multiple values allowed)' : '');
+        }
+
+        public static function defaultIsEmpty(Parameter $parameter): bool
+        {
+            if ($parameter->default === null) {
+                return true;
+            }
+
+            if (is_array($parameter->default) && count($parameter->default) === 0) {
+                return true;
+            }
+
+            return false;
+        }
+
+        public static function formatValue(mixed $value): string
+        {
+            if (\INF === $value) {
+                return 'INF';
+            }
+
+            if (\is_string($value)) {
+                $value = static::escape($value);
+            } elseif (\is_array($value)) {
+                foreach ($value as $key => $v) {
+                    if (\is_string($v)) {
+                        $value[$key] = static::escape($v);
+                    }
+                }
+            }
+
+            return str_replace('\\\\', '\\', json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE));
+        }
+
+        public static function escape(string $text): string
+        {
+            $text = preg_replace('/([^\\\\]|^)([<>])/', '$1\\\\$2', $text);
+
+            return self::escapeTrailingBackslash($text);
+        }
+
+        public static function escapeTrailingBackslash(string $text): string
+        {
+            if (str_ends_with($text, '\\')) {
+                $len = \strlen($text);
+                $text = rtrim($text, '\\');
+                $text = str_replace("\0", '', $text);
+                $text .= str_repeat("\0", $len - \strlen($text));
+            }
+
+            return $text;
+        }
+
+        public static function synopsis(ArgvParser $parser, bool $simple = false): string
+        {
+            $elements = [];
+
+            if ($simple) {
+                $elements[] = '[options]';
+            } else {
+                foreach ($parser->options as $option) {
+                    $value = '';
+
+                    if ($option->acceptValue) {
+                        $value = strtoupper($option->primaryName);
+
+                        if (!$option->required) {
+                            $value = '[' . $value . ']';
+                        }
+
+                        $value = ' ' . $value;
+                    }
+
+                    $negative = '';
+
+                    $synopsisSegments = preg_split('/, |\\|/', $option->synopsis);
+
+                    if ($option->negatable) {
+                        $negative = array_pop($synopsisSegments);
+                    }
+
+                    $synopsis = implode('|', $synopsisSegments);
+
+                    $element = $synopsis . $value;
+
+                    if ($negative) {
+                        $element .= '|' . $negative;
+                    }
+
+                    $elements[] = '[' . $element . ']';
+                }
+            }
+
+            /** @var Parameter[] $arguments */
+            $arguments = iterator_to_array($parser->arguments);
+
+            if ($elements !== [] && $arguments !== []) {
+                $elements[] = '[--]';
+            }
+
+            $tail = '';
+            foreach ($arguments as $argument) {
+                $element = '<' . $argument->primaryName . '>';
+
+                if ($argument->isArray) {
+                    $element .= '...';
+                }
+
+                if (!$argument->required) {
+                    $element = '[' . $element;
+                    $tail .= ']';
+                }
+
+                $elements[] = $element;
+            }
+
+            return implode(' ', $elements) . $tail;
         }
     }
 
-    enum ArgumentType
+    enum ParameterType
     {
         case STRING;
         case INT;
