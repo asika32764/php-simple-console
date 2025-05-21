@@ -7,11 +7,17 @@ namespace Asika\SimpleConsole {
     class SimpleConsole implements \ArrayAccess
     {
         public const ParameterType STRING = ParameterType::STRING;
+
         public const ParameterType INT = ParameterType::INT;
+
         public const ParameterType NUMERIC = ParameterType::NUMERIC;
+
         public const ParameterType FLOAT = ParameterType::FLOAT;
+
         public const ParameterType BOOLEAN = ParameterType::BOOLEAN;
+
         public const ParameterType ARRAY = ParameterType::ARRAY;
+
         public const ParameterType LEVEL = ParameterType::LEVEL;
 
         public const int SUCCESS = 0;
@@ -127,6 +133,7 @@ namespace Asika\SimpleConsole {
 
                     if ($this->get('help')) {
                         $this->showHelp();
+
                         return static::SUCCESS;
                     }
                 }
@@ -252,9 +259,7 @@ namespace Asika\SimpleConsole {
 
         public private(set) int $currentArgument = 0;
 
-        /**
-         * @var array<Parameter>
-         */
+        /** @var array<Parameter> */
         public private(set) array $parameters = [];
 
         /**
@@ -303,14 +308,13 @@ namespace Asika\SimpleConsole {
 
             $parameter = new Parameter($name, $type, $description, $required, $default, $negatable);
 
-            foreach ($parameter->nameArray as $n) {
+            foreach ((array) $parameter->name as $n) {
                 if (in_array($n, $this->existsNames, true)) {
                     throw new \RuntimeException('Duplicate parameter name "' . $n . '"');
                 }
             }
 
-            array_push($this->existsNames, ...$parameter->nameArray);
-
+            array_push($this->existsNames, ...((array) $parameter->name));
             $this->parameters[$parameter->primaryName] = $parameter;
 
             return $parameter;
@@ -340,15 +344,15 @@ namespace Asika\SimpleConsole {
 
         public function getOption(string $name): ?Parameter
         {
-            return array_find(iterator_to_array($this->options), static fn(Parameter $option) => $option->hasName($name)
+            return array_find(
+                iterator_to_array($this->options),
+                static fn(Parameter $option) => $option->hasName($name)
             );
         }
 
         public function mustGetOption(string $name): Parameter
         {
-            $option = $this->getOption($name);
-
-            if (!$option) {
+            if (!$option = $this->getOption($name)) {
                 throw new InvalidParameterException(\sprintf('The "-%s" option does not exist.', $name));
             }
 
@@ -546,12 +550,6 @@ namespace Asika\SimpleConsole {
             }
         }
 
-        public array $nameArray {
-            get {
-                return (array) $this->name;
-            }
-        }
-
         public string $synopsis {
             get {
                 if (is_string($this->name)) {
@@ -746,9 +744,7 @@ namespace Asika\SimpleConsole {
     {
         public static function describe(ArgvParser $parser, string $commandName, string $help = ''): string
         {
-            $lines = [
-                'Usage:'
-            ];
+            $lines = ['Usage:'];
 
             $lines[] = '  ' . $commandName . ' ' . static::synopsis($parser, true);
 
@@ -830,7 +826,7 @@ namespace Asika\SimpleConsole {
 
             return [
                 $synopsis,
-                $parameter->description . $default . ($parameter->isArray ? ' (multiple values allowed)' : '')
+                $parameter->description . $default . ($parameter->isArray ? ' (multiple values allowed)' : ''),
             ];
         }
 

@@ -10,9 +10,7 @@
     ],
     "minimum-stability": "beta",
     "require": {
-        "php": ">=8.4",
-        "windwalker/test": "^4.1",
-        "windwalker/utilities": "^4.1"
+        "php": ">=8.4"
     },
     "autoload": {
         "files": [
@@ -28,6 +26,8 @@
         "symfony/console": "^7.3@beta",
         "symfony/process": "^7.3@beta",
         "phpunit/phpunit": "^12.1",
-        "symfony/var-dumper": "^7.3@beta"
+        "symfony/var-dumper": "^7.3@beta",
+        "windwalker/test": "^4.1",
+        "windwalker/utilities": "^4.1"
     }
 }
