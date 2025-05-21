@@ -19,6 +19,11 @@
             "src/SimpleConsole.php"
         ]
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Asika\\SimpleConsole\\Test\\": "test/"
+        }
+    },
     "require-dev": {
         "symfony/console": "^7.3@beta",
         "symfony/process": "^7.3@beta",

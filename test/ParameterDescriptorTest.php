@@ -22,8 +22,15 @@ class ParameterDescriptorTest extends TestCase
 
         /** @var Parameter $parameter */
         $parameter = array_values(iterator_to_array($parser->parameters))[0];
+        $maxWidth = 0;
 
-        $line = $descriptor::line($parameter, strlen($parameter->synopsis) + 4);
+        if ($parameter->isArg) {
+            $line = $descriptor::describeArgument($parameter, $maxWidth);
+        } else {
+            $line = $descriptor::describeOption($parameter, $maxWidth);
+        }
+
+        $line = implode('  ', $line);
 
         self::assertEquals(
             $expected,
@@ -39,19 +46,19 @@ class ParameterDescriptorTest extends TestCase
                 function (ArgvParser $parser) {
                     $parser->addParameter('name', ParameterType::STRING, 'My Name');
                 },
-                'name    My Name',
+                'name  My Name',
             ],
             'Arg with default' => [
                 function (ArgvParser $parser) {
                     $parser->addParameter('name', ParameterType::STRING, 'My Name', default: 'John Doe');
                 },
-                'name    My Name [default: "John Doe"]',
+                'name  My Name [default: "John Doe"]',
             ],
             'Arg without desc' => [
                 function (ArgvParser $parser) {
                     $parser->addParameter('name', ParameterType::STRING, '', default: 'John Doe');
                 },
-                'name     [default: "John Doe"]',
+                'name   [default: "John Doe"]',
             ],
 
             // Options
@@ -59,13 +66,13 @@ class ParameterDescriptorTest extends TestCase
                 function (ArgvParser $parser) {
                     $parser->addParameter('--muted', ParameterType::BOOLEAN, 'Muted description');
                 },
-                '--muted    Muted description',
+                '--muted  Muted description',
             ],
             'Option bool with shortcut' => [
                 function (ArgvParser $parser) {
                     $parser->addParameter('--muted|-m', ParameterType::BOOLEAN, 'Muted description');
                 },
-                '-m, --muted    Muted description',
+                '-m, --muted  Muted description',
             ],
             'Option bool with multiple shortcuts' => [
                 function (ArgvParser $parser) {
@@ -161,7 +168,7 @@ class ParameterDescriptorTest extends TestCase
                     $parser->addParameter('--quiet|-q', ParameterType::STRING, 'Quiet description', default: true, negatable: true);
                     $parser->addParameter('--muted|-m', ParameterType::BOOLEAN, 'Muted description', negatable: true);
                 },
-                '[-q|--quiet [QUIET]|--no-quiet] [-m|--muted|--no-muted]'
+                '[-q|--quiet|--no-quiet] [-m|--muted|--no-muted]'
             ],
             'Args and options' => [
                 function (ArgvParser $parser) {

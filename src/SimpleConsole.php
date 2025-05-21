@@ -7,16 +7,12 @@ namespace Asika\SimpleConsole {
     class SimpleConsole implements \ArrayAccess
     {
         public const ParameterType STRING = ParameterType::STRING;
-
         public const ParameterType INT = ParameterType::INT;
-
         public const ParameterType NUMERIC = ParameterType::NUMERIC;
-
         public const ParameterType FLOAT = ParameterType::FLOAT;
-
         public const ParameterType BOOLEAN = ParameterType::BOOLEAN;
-
         public const ParameterType ARRAY = ParameterType::ARRAY;
+        public const ParameterType LEVEL = ParameterType::LEVEL;
 
         public const int SUCCESS = 0;
 
@@ -25,6 +21,8 @@ namespace Asika\SimpleConsole {
         public int $verbosity = 0;
 
         public array $params = [];
+
+        public bool $disableDefaultParameters = false;
 
         protected ArgvParser $parser;
 
@@ -73,6 +71,25 @@ namespace Asika\SimpleConsole {
             );
         }
 
+        public function addHelpParameter(): Parameter
+        {
+            return $this->addParameter(
+                '--help|-h',
+                static::BOOLEAN,
+                'Show description of all parameters',
+                default: false
+            );
+        }
+
+        public function addVerbosityParameter(): Parameter
+        {
+            return $this->addParameter(
+                '--verbosity|-v',
+                static::LEVEL,
+                'The verbosity level of the output',
+            );
+        }
+
         public function get(string $name, mixed $default = null): mixed
         {
             return $this->params[$name] ?? $default;
@@ -94,9 +111,25 @@ namespace Asika\SimpleConsole {
             $main ??= $this->doExecute(...);
 
             try {
+                if (!$this->disableDefaultParameters) {
+                    $this->addHelpParameter();
+                    $this->addVerbosityParameter();
+                }
+
                 $this->configure();
 
                 $this->params = $this->parser->parse($argv);
+
+                if (!$this->disableDefaultParameters) {
+                    if ($v = $this->get('verbosity')) {
+                        $this->verbosity = $v;
+                    }
+
+                    if ($this->get('help')) {
+                        $this->showHelp();
+                        return static::SUCCESS;
+                    }
+                }
 
                 $exitCode = $main($this);
 
@@ -281,6 +314,11 @@ namespace Asika\SimpleConsole {
             $this->parameters[$parameter->primaryName] = $parameter;
 
             return $parameter;
+        }
+
+        public function removeParameter(string $name): void
+        {
+            unset($this->parameters[$name]);
         }
 
         public function getArgument(string $name): ?Parameter
@@ -548,7 +586,7 @@ namespace Asika\SimpleConsole {
 
         public bool $acceptValue {
             get {
-                return !$this->isBoolean && !$this->isLevel;
+                return !$this->isBoolean && !$this->isLevel && !$this->negatable;
             }
         }
 
@@ -721,14 +759,15 @@ namespace Asika\SimpleConsole {
                 $lines[] = '';
                 $lines[] = 'Arguments:';
                 $maxColWidth = 0;
+                $argumentLines = [];
 
-                /** @var Parameter $argument */
                 foreach ($arguments as $argument) {
-                    $maxColWidth = max($maxColWidth, strlen($argument->synopsis));
+                    $argumentLines[] = static::describeArgument($argument, $maxColWidth);
                 }
 
-                foreach ($arguments as $argument) {
-                    $lines[] = '  ' . static::line($argument, $maxColWidth + 2);
+                foreach ($argumentLines as [$start, $end]) {
+                    $spacing = $maxColWidth - strlen($start) + 4;
+                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
                 }
             }
 
@@ -736,14 +775,15 @@ namespace Asika\SimpleConsole {
                 $lines[] = '';
                 $lines[] = 'Options:';
                 $maxColWidth = 0;
+                $optionLines = [];
 
-                /** @var Parameter $option */
                 foreach ($options as $option) {
-                    $maxColWidth = max($maxColWidth, strlen($option->synopsis));
+                    $optionLines[] = static::describeOption($option, $maxColWidth);
                 }
 
-                foreach ($options as $option) {
-                    $lines[] = '  ' . static::line($option, $maxColWidth + 2);
+                foreach ($optionLines as [$start, $end]) {
+                    $spacing = $maxColWidth - strlen($start) + 4;
+                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
                 }
             }
 
@@ -755,16 +795,7 @@ namespace Asika\SimpleConsole {
             return implode("\n", $lines);
         }
 
-        public static function line(Parameter $parameter, int &$maxWidth = 0): string
-        {
-            if ($parameter->isArg) {
-                return static::lineArgument($parameter, $maxWidth);
-            }
-
-            return static::lineOption($parameter, $maxWidth);
-        }
-
-        public static function lineArgument(Parameter $parameter, int &$maxWidth = 0): string
+        public static function describeArgument(Parameter $parameter, int &$maxWidth = 0): array
         {
             if (!static::defaultIsEmpty($parameter)) {
                 $default = ' [default: ' . static::formatValue($parameter->default) . ']';
@@ -772,12 +803,12 @@ namespace Asika\SimpleConsole {
                 $default = '';
             }
 
-            $spacing = max(0, $maxWidth - strlen($parameter->synopsis)) ?: 2;
+            $maxWidth = max($maxWidth, strlen($parameter->synopsis));
 
-            return $parameter->synopsis . str_repeat(' ', $spacing) . $parameter->description . $default;
+            return [$parameter->synopsis, $parameter->description . $default];
         }
 
-        public static function lineOption(Parameter $parameter, int &$maxWidth = 0): string
+        public static function describeOption(Parameter $parameter, int &$maxWidth = 0): array
         {
             if (($parameter->acceptValue || $parameter->negatable) && !static::defaultIsEmpty($parameter)) {
                 $default = ' [default: ' . static::formatValue($parameter->default) . ']';
@@ -794,11 +825,13 @@ namespace Asika\SimpleConsole {
                 }
             }
 
-            $maxWidth = max(0, $maxWidth - strlen($parameter->primaryName)) ?: 2;
             $synopsis = $parameter->synopsis . ($parameter->acceptValue ? $value : '');
+            $maxWidth = max($maxWidth, strlen($synopsis));
 
-            return $synopsis . '@@spacing@@' . $parameter->description . $default
-                . ($parameter->isArray ? ' (multiple values allowed)' : '');
+            return [
+                $synopsis,
+                $parameter->description . $default . ($parameter->isArray ? ' (multiple values allowed)' : '')
+            ];
         }
 
         public static function defaultIsEmpty(Parameter $parameter): bool
@@ -872,21 +905,9 @@ namespace Asika\SimpleConsole {
                         $value = ' ' . $value;
                     }
 
-                    $negative = '';
-
-                    $synopsisSegments = preg_split('/, |\\|/', $option->synopsis);
-
-                    if ($option->negatable) {
-                        $negative = array_pop($synopsisSegments);
-                    }
-
-                    $synopsis = implode('|', $synopsisSegments);
+                    $synopsis = str_replace(', ', '|', $option->synopsis);
 
                     $element = $synopsis . $value;
-
-                    if ($negative) {
-                        $element .= '|' . $negative;
-                    }
 
                     $elements[] = '[' . $element . ']';
                 }

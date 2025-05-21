@@ -6,9 +6,12 @@ namespace Asika\SimpleConsole\Test;
 
 use Asika\SimpleConsole\SimpleConsole;
 use PHPUnit\Framework\TestCase;
+use Windwalker\Test\Traits\BaseAssertionTrait;
 
 class ConsoleTest extends TestCase
 {
+    use BaseAssertionTrait;
+
     public function testExecuteCallback(): void
     {
         $params = [];
@@ -38,6 +41,8 @@ class ConsoleTest extends TestCase
                 'foo' => 'QWQ',
                 'steps' => false,
                 'bar' => 'BAR',
+                'help' => false,
+                'verbosity' => 0,
             ],
             $params
         );
@@ -80,6 +85,8 @@ class ConsoleTest extends TestCase
             [
                 'name' => 'Hello',
                 'foo' => 'QWQ',
+                'help' => false,
+                'verbosity' => 0,
                 'steps' => false,
                 'bar' => 'BAR',
             ],
@@ -87,9 +94,11 @@ class ConsoleTest extends TestCase
         );
     }
 
-    public function testHelp()
+    public function testHelp(): void
     {
-        $app = new SimpleConsole();
+        $fp = fopen('php://memory', 'rb+');
+
+        $app = new SimpleConsole(stdout: $fp);
         $app->addParameter('name', $app::STRING, 'Name Description', required: true);
         $app->addParameter('steps', $app::NUMERIC, 'Steps Description', default: 20);
         $app->addParameter('--foo|-f', $app::STRING, 'Foo Description', required: true);
@@ -99,15 +108,37 @@ class ConsoleTest extends TestCase
         $argv = [
             'command',
             'Hello',
-            '--foo',
-            'QWQ',
+            '-h',
         ];
+        $app->verbosity = 1;
 
         $app->execute(
             $argv,
             function () use ($app) {
-                $app->showHelp();
+                //
             }
+        );
+
+        rewind($fp);
+        $output = stream_get_contents($fp);
+
+        self::assertStringSafeEquals(
+            <<<TEXT
+            Usage:
+              command [options] [--] <name> [<steps>]
+            
+            Arguments:
+              name     Name Description
+              steps    Steps Description [default: 20]
+            
+            Options:
+              -f, --foo=FOO             Foo Description
+              -b|-c, --bar[=BAR]        Bar Description [default: "BAR"]
+              -m, --muted|--no-muted    Muted Description
+              -h, --help                Show description of all parameters
+              -v, --verbosity           The verbosity level of the output
+            TEXT,
+            $output
         );
     }
 }
