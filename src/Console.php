@@ -216,7 +216,9 @@ namespace Asika\SimpleConsole {
 
         public function exec(string $cmd, ?\Closure $output = null, bool $showCmd = true): int
         {
-            $showCmd || $this->writeln('>> ' . $cmd);
+            if ($showCmd) {
+                $this->writeln('>> ' . $cmd);
+            }
             $descriptorspec = [
                 0 => ["pipe", "r"],  // stdin
                 1 => ["pipe", "w"],  // stdout
