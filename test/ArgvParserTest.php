@@ -177,7 +177,7 @@ class ArgvParserTest extends TestCase
 
         assertEquals('admin', $args['user']);
 
-        $this->expectExceptionMessage('Required value "user" is missing.');
+        $this->expectExceptionMessage('Required value for "user" is missing.');
 
         $parser->parse(
             ['command', 'Hello', '200', '--user']
