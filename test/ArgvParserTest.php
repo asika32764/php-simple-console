@@ -145,6 +145,73 @@ class ArgvParserTest extends TestCase
         ];
     }
 
+    #[DataProvider('invalidConfigureProvider')]
+    public function testInvalidParametersConfigurations(\Closure $closure, string $expected): void
+    {
+        $this->expectExceptionMessage($expected);
+
+        $parser = new ArgvParser();
+        $closure($parser);
+    }
+
+    public static function invalidConfigureProvider()
+    {
+        return [
+            'Argument must not negatable' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('name', ParameterType::STRING, negatable: true);
+                },
+                'Argument "name" cannot be negatable.'
+            ],
+            'ARRAY type default vlaue must b array' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('name', ParameterType::ARRAY, default: false);
+                },
+                'Default value of "name" must be an array.'
+            ],
+            'Argument require should not has default' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('name', ParameterType::STRING)
+                        ->required(true)
+                        ->default('A');
+                },
+                'Default value of "name" cannot be set when required is true.'
+            ],
+            'Argument cannot be BOOLEAN' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('name', ParameterType::BOOLEAN);
+                },
+                'Argument "name" cannot be type: BOOLEAN.'
+            ],
+            'Argument cannot be LEVEL' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('name', ParameterType::LEVEL);
+                },
+                'Argument "name" cannot be type: LEVEL.'
+            ],
+
+            // Options
+            'Negatable option cannot require value' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('--muted|-m', ParameterType::BOOLEAN)
+                        ->required(true)
+                        ->negatable(true);
+                },
+                'Negatable option "muted" cannot be required.'
+            ],
+
+            // Both
+            'Option require should not has default' => [
+                function (ArgvParser $parser) {
+                    $parser->addParameter('--name', ParameterType::STRING)
+                        ->required(true)
+                        ->default('A');
+                },
+                'Default value of "name" cannot be set when required is true.'
+            ],
+        ];
+    }
+
     public function testArgumentRequired(): void
     {
         $parser = new ArgvParser();

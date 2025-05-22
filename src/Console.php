@@ -52,8 +52,11 @@ namespace Asika\SimpleConsole {
             return $parser;
         }
 
-        public static function parseArgv(\Closure|null $configure = null, ?array $argv = null, bool $validate = true): array
-        {
+        public static function parseArgv(
+            \Closure|null $configure = null,
+            ?array $argv = null,
+            bool $validate = true
+        ): array {
             return static::createArgvParser($configure)->parse($argv ?? $_SERVER['argv'], $validate);
         }
 
@@ -360,7 +363,7 @@ namespace Asika\SimpleConsole {
             array_push($this->existsNames, ...((array) $parameter->name));
             $this->parameters[$parameter->primaryName] = $parameter;
 
-            return $parameter;
+            return $parameter->selfValidate();
         }
 
         public function removeParameter(string $name): void
@@ -404,6 +407,9 @@ namespace Asika\SimpleConsole {
 
         public function parse(array $argv, bool $validate = true): array
         {
+            foreach ($this->parameters as $parameter) {
+                $parameter->selfValidate();
+            }
             array_shift($argv);
             $this->currentArgument = 0;
             $this->parseOptions = true;
@@ -560,7 +566,7 @@ namespace Asika\SimpleConsole {
      * @method  self description(string $value)
      * @method  self required(bool $value)
      * @method  self negatable(bool $value)
-     * @method  self default(bool $value)
+     * @method  self default(mixed $value)
      */
     class Parameter
     {
@@ -655,6 +661,10 @@ namespace Asika\SimpleConsole {
                     $this->name[$i] = ltrim($n, '-');
                 }
             }
+        }
+
+        public function selfValidate(): static
+        {
             if ($this->isArray && !is_array($this->defaultValue)) {
                 throw new \InvalidArgumentException("Default value of \"{$this->primaryName}\" must be an array.");
             }
@@ -662,6 +672,11 @@ namespace Asika\SimpleConsole {
                 if ($this->negatable) {
                     throw new \InvalidArgumentException(
                         "Argument \"{$this->primaryName}\" cannot be negatable."
+                    );
+                }
+                if ($this->isBoolean || $this->isLevel) {
+                    throw new \InvalidArgumentException(
+                        "Argument \"{$this->primaryName}\" cannot be type: {$this->type->name}."
                     );
                 }
             } else {
@@ -676,6 +691,8 @@ namespace Asika\SimpleConsole {
                     "Default value of \"{$this->primaryName}\" cannot be set when required is true."
                 );
             }
+
+            return $this;
         }
 
         public function hasName(string $name): bool
@@ -728,7 +745,7 @@ namespace Asika\SimpleConsole {
             if (property_exists($this, $name)) {
                 $this->{$name} = $args[0];
 
-                return $this;
+                return $this->selfValidate();
             }
             throw new \BadMethodCallException("Method $name() does not exist.");
         }

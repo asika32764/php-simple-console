@@ -11,7 +11,7 @@ $app = new class () extends Console
     {
         // Arguments
         $this->addParameter('name', type: $this::STRING, description: 'Your name', required: true);
-        $this->addParameter('age', type: $this::INT, description: 'Your age');
+        $this->addParameter('age', type: $this::LEVEL, description: 'Your age');
 
         // Name starts with `-` or `--` will be treated as option
         $this->addParameter('--height', type: $this::FLOAT, description: 'Your height', required: true);
@@ -21,8 +21,6 @@ $app = new class () extends Console
 
     protected function doExecute(): int|bool
     {
-        throw new \RuntimeException('An error occurred.');
-
         $this->writeln('Hello');
         $this->writeln('Name: ' . $this->get('name'));
         $this->writeln('Age: ' . $this->get('age'));

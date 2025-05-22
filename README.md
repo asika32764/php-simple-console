@@ -8,38 +8,41 @@
 Single file console framework to help you write scripts.
 
 <!-- TOC -->
+
 * [PHP Simple Console V2.0](#php-simple-console-v20)
-  * [Installation](#installation)
-  * [Getting Started](#getting-started)
-    * [Run Console by Closure](#run-console-by-closure)
-    * [Run Console by Custom Class](#run-console-by-custom-class)
-    * [The Return Value](#the-return-value)
-  * [Parameter Parser](#parameter-parser)
-  * [Parameter Definitions](#parameter-definitions)
-    * [Show Help](#show-help)
-    * [Override Help Information](#override-help-information)
-  * [Parameter Configurations](#parameter-configurations)
-    * [Get Parameters Value](#get-parameters-value)
-    * [Parameters Type](#parameters-type)
-      * [`LEVEL` type](#level-type)
-    * [Parameters Options](#parameters-options)
-      * [`description`](#description)
-      * [`required`](#required)
-      * [`default`](#default)
-      * [`negatable`](#negatable)
-    * [Parameters Parsing](#parameters-parsing)
-  * [Error Handling](#error-handling)
-    * [Wrong Parameters](#wrong-parameters)
-    * [Verbosity](#verbosity)
-  * [The Built-In Options](#the-built-in-options)
-    * [Disable Built-In Options for Console App](#disable-built-in-options-for-console-app)
-  * [Input/Output](#inputoutput)
-    * [STDIN/STDOUT/STDERR](#stdinstdoutstderr)
-    * [Output Methods](#output-methods)
-    * [Input and Asking Questions](#input-and-asking-questions)
-  * [Run Sub-Process](#run-sub-process)
-    * [Hide Command Name](#hide-command-name)
-    * [Custom Output](#custom-output)
+    * [Installation](#installation)
+    * [Getting Started](#getting-started)
+        * [Run Console by Closure](#run-console-by-closure)
+        * [Run Console by Custom Class](#run-console-by-custom-class)
+        * [The Return Value](#the-return-value)
+    * [Parameter Parser](#parameter-parser)
+    * [Parameter Definitions](#parameter-definitions)
+        * [Show Help](#show-help)
+        * [Override Help Information](#override-help-information)
+    * [Parameter Configurations](#parameter-configurations)
+        * [Get Parameters Value](#get-parameters-value)
+        * [Parameters Type](#parameters-type)
+            * [`ARRAY` type](#array-type)
+            * [`LEVEL` type](#level-type)
+        * [Parameters Options](#parameters-options)
+            * [`description`](#description)
+            * [`required`](#required)
+            * [`default`](#default)
+            * [`negatable`](#negatable)
+        * [Parameters Parsing](#parameters-parsing)
+    * [Error Handling](#error-handling)
+        * [Wrong Parameters](#wrong-parameters)
+        * [Verbosity](#verbosity)
+    * [The Built-In Options](#the-built-in-options)
+        * [Disable Built-In Options for Console App](#disable-built-in-options-for-console-app)
+    * [Input/Output](#inputoutput)
+        * [STDIN/STDOUT/STDERR](#stdinstdoutstderr)
+        * [Output Methods](#output-methods)
+        * [Input and Asking Questions](#input-and-asking-questions)
+    * [Run Sub-Process](#run-sub-process)
+        * [Hide Command Name](#hide-command-name)
+        * [Custom Output](#custom-output)
+
 <!-- TOC -->
 
 ## Installation
@@ -145,7 +148,7 @@ $app->execute($argv);
 
 ### The Return Value
 
-You can return `true` or `0` as success, `false` or any int larger than `0` as failure. Please refer to 
+You can return `true` or `0` as success, `false` or any int larger than `0` as failure. Please refer to
 [GNU/Linux Exit Codes](https://slg.ddnss.de/list-of-common-exit-codes-for-gnu-linux/).
 
 Simple Console provides constants for success and failure:
@@ -465,21 +468,55 @@ if (($dir = $app['dir']) !== false) {
 
 You can define the type of parameters, it will auto convert to the type you defined.
 
-| Type    | Argument                       | Option                                      | Desscription                                            |
-|---------|--------------------------------|---------------------------------------------|---------------------------------------------------------|
-| STRING  | String type                    | String type                                 |                                                         |
-| INT     | Integer type                   | Integer type                                |                                                         |
-| FLOAT   | Float type                     | Flot type                                   | Can be int or float, will all converts to float         |
-| NUMERIC | Int or Float                   | Int or Float                                | Can be int or float, will all converts to float         |
-| BOOLEAN | `1` or `0`                     | Boolean or `1` or `0`, cannot provide value | Options supports `negatable`                            |
-| ARRAY   | Array, should be last argument | Array                                       | Can provide multiple as `string[]`                      |
-| LEVEL   | Int type                       | Int type                                    | Can provide multiple times and convert the times to int |
+| Type    | Argument                     | Option                | Description                                                             |
+|---------|------------------------------|-----------------------|-------------------------------------------------------------------------|
+| STRING  | String type                  | String type           |                                                                         |
+| INT     | Integer type                 | Integer type          |                                                                         |
+| FLOAT   | Float type                   | Flot type             | Can be int or float, will all converts to float                         |
+| NUMERIC | Int or Float                 | Int or Float          | Can be int or float, will all converts to float                         |
+| BOOLEAN | (X)                          | Add `--opt` as `TRUE` | Use `negatable` to supports `--opt` as `TRUE` and `--no-opt` as `FALSE` |
+| ARRAY   | Array, must be last argument | Array                 | Can provide multiple as `string[]`                                      |
+| LEVEL   | (X)                          | Int type              | Can provide multiple times and convert the times to int                 |
 
-All parameter values is default as `string` type, and convert to the type you defined.
+All parameter values parsed from `argv` is default as `string` type, and convert to the type you defined.
+
+#### `ARRAY` type
+
+The `ARRAY` can be use to arguments and options.
+
+If you set an argument as `ARRAY` type, it must be last argument, and you can add more tailing arguments.
+
+```php
+$app->addParameter('name', $app::STRING);
+$app->addParameter('tag', $app::ARRAY);
+
+// Run: console.php foo a b c d e
+
+$app->get('tag'); // [a, b, c ,d, e]
+```
+
+Use `--` to escape all following options, all will be treated as arguments, it is useful if you are
+writing a proxy script.
+
+```bash
+php listen.php --timeout 500 --wait 100 -- php flower.php hello --name=sakura --location Japan --muted
+
+// The last argument values will be:
+// ['php', 'flower.php', 'hello', '--name=sakura', '--location', 'Japan', '--muted']
+```
+
+If you set an option as `ARRAY` type, it can be used as `--tag a --tag b --tag c`.
+
+```php
+$app->addParameter('--tag|-t', $app::ARRAY);
+
+$app->get('tag'); // [a, b, c]
+```
 
 #### `LEVEL` type
 
-The `LEVEL` type is a special type, it will convert the times to int. For example, a verbosity level of `-vvv` will be converted to `3`, 
+The `LEVEL` type is a special type, it will convert the times to int. For example, a verbosity level of `-vvv` will be
+converted to `3`,
 and `-v` will be converted to `1`. You can use this type to define the verbosity level of your argv parser.
 
 ```php
@@ -497,24 +534,25 @@ If you are using `Console` class, the verbosity is built-in option, you don't ne
 
 #### `required`
 
-- **Argument**: Required argument must be provided, otherwise it will throw an error. 
+- **Argument**: Required argument must be provided, otherwise it will throw an error.
     - You should not set a required argument after an optional argument.
-- **Option**: All options are `optional`. 
-    - If you set an option as `required`, it means this option requires a value. 
+- **Option**: All options are `optional`.
+    - If you set an option as `required`, it means this option requires a value, only `--option` without value is not
+      allowed.
     - `boolean` option should not be required.
 
 #### `default`
 
-- **Argument**: Default value for the argument. 
+- **Argument**: Default value for the argument.
     - If not provided, it will be `null`, `false` for boolean type, or `[]` for array type.
-- **Option**: Default value for the option. 
+- **Option**: Default value for the option.
     - If not provided, it will be `null`, `false` for boolean type, or `[]` for array type.
 
 #### `negatable`
 
 - **Argument**: Argument cannot use this option.
-- **Option**: Negatable option. Should work with `boolean` type. 
-    - If set to `true`, it will support `--xxx|--no-xxx` 2 styles to set `true|false`. 
+- **Option**: Negatable option. Should work with `boolean` type.
+    - If set to `true`, it will support `--xxx|--no-xxx` 2 styles to set `true|false`.
     - If you want to set a boolean option's default as `TRUE` and use `--no-xxx` to set it as `FALSE`, you can do this:
     ```php
     $app->addParameter('--muted|-m', $app::BOOLEAN, default: true, negatable: true);
@@ -611,8 +649,8 @@ $app = new \Asika\SimpleConsole\Console();
 $app->execute(); // You can use built-in `-h` and `-v` options
 ```
 
-If you parse `argv` by `ArgvParser`, you must add it manually. To avoid the required parameters error, 
-you can set `validate` to `false` when parsing. Then validate and cast parameters after parsing and help 
+If you parse `argv` by `ArgvParser`, you must add it manually. To avoid the required parameters error,
+you can set `validate` to `false` when parsing. Then validate and cast parameters after parsing and help
 content display.
 
 ```php
@@ -671,7 +709,6 @@ $app->execute(
 );
 ```
 
-
 ## Input/Output
 
 ### STDIN/STDOUT/STDERR
@@ -701,6 +738,7 @@ echo stream_get_contents($fp);
 ### Output Methods
 
 To output messages, you can use these methods:
+
 - `write(string $message, bool $err = false)`: Write to STDOUT or STDERR
 - `writeln(string $message, bool $err = false)`: Write to STDOUT or STDERR with a new line
 - `newLine(int $lines, bool $err = false)`: Write empty new lines to STDOUT or STDERR
@@ -803,7 +841,7 @@ $app->exec(
 );
 ```
 
-By now, running sub-process by `prop_open()` is in BETA, if `prop_open()` not work for your environment, simply override 
+By now, running sub-process by `prop_open()` is in BETA, if `prop_open()` not work for your environment, simply override
 `exec()` to use PHP `system()` instead.
 
 ```php
