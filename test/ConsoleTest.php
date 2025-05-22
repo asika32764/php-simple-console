@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Asika\SimpleConsole\Test;
 
-use Asika\SimpleConsole\SimpleConsole;
+use Asika\SimpleConsole\Console;
 use PHPUnit\Framework\TestCase;
 use Windwalker\Test\Traits\BaseAssertionTrait;
 
@@ -22,7 +22,7 @@ class ConsoleTest extends TestCase
             'QWQ',
         ];
 
-        $app = new SimpleConsole();
+        $app = new Console();
         $app->addParameter('name', $app::STRING);
         $app->addParameter('steps', $app::NUMERIC);
         $app->addParameter('--foo', $app::STRING);
@@ -57,7 +57,7 @@ class ConsoleTest extends TestCase
             'QWQ',
         ];
 
-        $app = new class ($parsed) extends SimpleConsole {
+        $app = new class ($parsed) extends Console {
             public function __construct(public ?array &$parsed = null)
             {
                 parent::__construct();
@@ -98,7 +98,7 @@ class ConsoleTest extends TestCase
     {
         $fp = fopen('php://memory', 'rb+');
 
-        $app = new SimpleConsole(stdout: $fp);
+        $app = new Console(stdout: $fp);
         $app->addParameter('name', $app::STRING, 'Name Description', required: true);
         $app->addParameter('steps', $app::NUMERIC, 'Steps Description', default: 20);
         $app->addParameter('--foo|-f', $app::STRING, 'Foo Description', required: true);

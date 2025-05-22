@@ -1,384 +1,883 @@
 <?php
 
-/**
- * Part of Simple Console project.
- *
- * @copyright  Copyright (C) 2017 Simon Asika.
- * @license    MIT
- */
+declare(strict_types=1);
 
-namespace Asika\SimpleConsole;
+namespace Asika\SimpleConsole {
 
-class Console
-{
-    /**
-     * @var  string
-     */
-    protected $executable;
-
-    /**
-     * @var  array
-     */
-    protected $args = array();
-
-    /**
-     * @var  array
-     */
-    protected $options = array();
-
-    /**
-     * @var  string
-     */
-    protected $help = '';
-
-    /**
-     * @var  array
-     */
-    protected $helpOptions = array('h', 'help');
-
-    /**
-     * @var  array
-     */
-    protected $booleanMapping = array(
-        0 => array('n', 'no', 'false', 0, '0', true),
-        1 => array('y', 'yes', 'true', 1, '1', false, null)
-    );
-
-    /**
-     * @param array $argv
-     */
-    public function __construct($argv = null)
+    class Console implements \ArrayAccess
     {
-        $this->parseArgv($argv ?: $_SERVER['argv']);
+        public const ParameterType STRING = ParameterType::STRING;
 
-        $this->init();
-    }
+        public const ParameterType INT = ParameterType::INT;
 
-    /**
-     * @return  void
-     */
-    protected function init()
-    {
-        // Override if necessary
-    }
+        public const ParameterType NUMERIC = ParameterType::NUMERIC;
 
-    /**
-     * @param \Closure|null $callback
-     *
-     * @return  int
-     */
-    public function execute(\Closure $callback = null)
-    {
-        try {
-            if ($this->getOption($this->helpOptions)) {
-                $this->out($this->getHelp());
+        public const ParameterType FLOAT = ParameterType::FLOAT;
 
-                return 0;
+        public const ParameterType BOOLEAN = ParameterType::BOOLEAN;
+
+        public const ParameterType ARRAY = ParameterType::ARRAY;
+
+        public const ParameterType LEVEL = ParameterType::LEVEL;
+
+        public const int SUCCESS = 0;
+
+        public const int FAILURE = 255;
+
+        public string $helpHeader = '';
+
+        public string $help = '';
+
+        public ?string $commandName = null;
+
+        public int $verbosity = 0;
+
+        public array $params = [];
+
+        public array $boolMapping = [
+            ['n', 'no', 'false', 0, '0'],
+            ['y', 'yes', 'true', 1, '1'],
+        ];
+
+        public bool $disableDefaultParameters = false;
+
+        public static function createArgvParser(\Closure|null $configure = null): ArgvParser
+        {
+            $parser = new ArgvParser();
+
+            if ($configure) {
+                $configure($parser);
             }
 
-            if ($callback) {
-                if (PHP_VERSION_ID >= 50400) {
-                    $callback = $callback->bindTo($this);
+            return $parser;
+        }
+
+        public static function parseArgv(\Closure|null $configure = null, ?array $argv = null, bool $validate = true): array
+        {
+            return static::createArgvParser($configure)->parse($argv ?? $_SERVER['argv'], $validate);
+        }
+
+        public function __construct(
+            public $stdout = STDOUT,
+            public $stderr = STDERR,
+            public $stdin = STDIN,
+            public ArgvParser $parser = new ArgvParser(),
+        ) {
+            //
+        }
+
+        public function addParameter(
+            string|array $name,
+            ParameterType $type,
+            string $description = '',
+            bool $required = false,
+            mixed $default = null,
+            bool $negatable = false,
+        ): Parameter {
+            return $this->parser->addParameter(
+                $name,
+                $type,
+                $description,
+                $required,
+                $default,
+                $negatable,
+            );
+        }
+
+        public function addHelpParameter(): Parameter
+        {
+            return $this->addParameter(
+                '--help|-h',
+                static::BOOLEAN,
+                'Show description of all parameters',
+                default: false
+            );
+        }
+
+        public function addVerbosityParameter(): Parameter
+        {
+            return $this->addParameter(
+                '--verbosity|-v',
+                static::LEVEL,
+                'The verbosity level of the output',
+            );
+        }
+
+        public function get(string $name, mixed $default = null): mixed
+        {
+            return $this->params[$name] ?? $default;
+        }
+
+        protected function configure(): void
+        {
+        }
+
+        protected function preprocess(): void
+        {
+        }
+
+        protected function doExecute(): int|bool
+        {
+            return 0;
+        }
+
+        public function execute(?array $argv = null, ?\Closure $main = null): int
+        {
+            $argv = $argv ?? $_SERVER['argv'];
+            $this->commandName ??= basename($argv[0]);
+            try {
+                if (!$this->disableDefaultParameters) {
+                    $this->addHelpParameter();
+                    $this->addVerbosityParameter();
+                }
+                $this->configure();
+                $this->params = $this->parser->parse($argv, false);
+                if (!$this->disableDefaultParameters) {
+                    $this->verbosity = (int) $this->get('verbosity');
+                    if ($this->get('help')) {
+                        $this->showHelp();
+
+                        return static::SUCCESS;
+                    }
+                }
+                $this->params = $this->parser->validateAndCastParams($this->params);
+                $this->preprocess();
+                $exitCode = $main ? $main->call($this, $this) : $this->doExecute();
+                if ($exitCode === true || $exitCode === null) {
+                    $exitCode = 0;
+                } elseif ($exitCode === false) {
+                    $exitCode = 255;
                 }
 
-                $result = call_user_func($callback, $this);
+                return (int) $exitCode;
+            } catch (\Throwable $e) {
+                return $this->handleException($e);
+            }
+        }
+
+        public function showHelp(): void
+        {
+            $help = ParameterDescriptor::describe($this->parser, $this->commandName, $this->help);
+            $this->writeln(ltrim($this->helpHeader . "\n\n" . $help))->newLine();
+        }
+
+        public function write(string $message, bool $err = false): static
+        {
+            fwrite($err ? $this->stderr : $this->stdout, $message);
+
+            return $this;
+        }
+
+        public function writeln(string $message = '', bool $err = false): static
+        {
+            $this->write($message . "\n", $err);
+
+            return $this;
+        }
+
+        public function newLine(int $lines = 1, bool $err = false): static
+        {
+            $this->write(str_repeat("\n", $lines), $err);
+
+            return $this;
+        }
+
+        public function in(): string
+        {
+            return rtrim(fread(STDIN, 8192), "\n\r");
+        }
+
+        public function ask(string $question = '', string $default = ''): string
+        {
+            $this->write($question);
+            $in = rtrim(fread(STDIN, 8192), "\n\r");
+
+            return $in === '' ? $default : $in;
+        }
+
+        public function askConfirm(string $question = '', string $default = ''): bool
+        {
+            return (bool) $this->mapBoolean($this->ask($question, $default));
+        }
+
+        public function mapBoolean($in): bool|null
+        {
+            $in = strtolower((string) $in);
+            [$falsy, $truly] = $this->boolMapping;
+            if (in_array($in, $falsy, true)) {
+                return false;
+            }
+            if (in_array($in, $truly, true)) {
+                return true;
+            }
+
+            return null;
+        }
+
+        public function exec(string $cmd, ?\Closure $output = null, bool $showCmd = true): int
+        {
+            $showCmd || $this->writeln('>> ' . $cmd);
+            $descriptorspec = [
+                0 => ["pipe", "r"],  // stdin
+                1 => ["pipe", "w"],  // stdout
+                2 => ["pipe", "w"],   // stderr
+            ];
+            if ($process = proc_open($cmd, $descriptorspec, $pipes)) {
+                $output ??= fn($data, $err) => $this->write($data, $err);
+                while (($out = fgets($pipes[1])) || $err = fgets($pipes[2])) {
+                    if (isset($out[0])) {
+                        $output($out, false);
+                    }
+                    if (isset($err[0])) {
+                        $output($err, true);
+                    }
+                }
+
+                return proc_close($process);
+            }
+
+            return 255;
+        }
+
+        public function mustExec(string $cmd, ?\Closure $output = null): int
+        {
+            if (($result = $this->exec($cmd, $output)) !== 0) {
+                throw new \RuntimeException('Command "' . $cmd . '" failed with code ' . $result);
+            }
+
+            return $result;
+        }
+
+        protected function handleException(\Throwable $e): int
+        {
+            $v = $this->verbosity;
+
+            if ($e instanceof InvalidParameterException) {
+                $this->writeln('[Warning] ' . $e->getMessage(), true)
+                    ->newLine(err: true)
+                    ->writeln(
+                        $this->commandName . ' ' . ParameterDescriptor::synopsis($this->parser, false),
+                        true
+                    );
             } else {
-                $result = $this->doExecute();
+                $this->writeln('[Error] ' . $e->getMessage(), true);
             }
-        } catch (\Exception $e) {
-            $result = $this->handleException($e);
-        } catch (\Throwable $e) {
-            $result = $this->handleException($e);
+
+            if ($v > 0) {
+                $this->writeln('[Backtrace]:', true)
+                    ->writeln($e->getTraceAsString(), true);
+            }
+
+            $code = $e->getCode();
+
+            return $code === 0 ? 255 : $code;
         }
 
-        if ($result === true) {
-            $result = 0;
-        } elseif ($result === false) {
-            $result = 255;
-        } else {
-            $result = (bool) $result;
+        public function offsetExists(mixed $offset): bool
+        {
+            return array_key_exists($offset, $this->params);
         }
 
-        return (int) $result;
-    }
-
-    /**
-     * @return  mixed
-     */
-    protected function doExecute()
-    {
-        // Please override this method.
-        return 0;
-    }
-
-    /**
-     * @param string $method
-     *
-     * @return  mixed
-     */
-    protected function delegate($method)
-    {
-        $args = func_get_args();
-        array_shift($args);
-
-        if (!is_callable(array($this, $method))) {
-            throw new \LogicException(sprintf('Method: %s not found', $method));
+        public function offsetGet(mixed $offset): mixed
+        {
+            return $this->params[$offset] ?? null;
         }
 
-        return call_user_func_array(array($this, $method), $args);
-    }
-
-    /**
-     * @return  string
-     */
-    protected function getHelp()
-    {
-        return trim($this->help);
-    }
-
-    /**
-     * @param \Exception|\Throwable $e
-     *
-     * @return  int
-     */
-    protected function handleException($e)
-    {
-        $v = $this->getOption('v');
-
-        if ($e instanceof CommandArgsException) {
-            $this->err('[Warning] ' . $e->getMessage())
-                ->err()
-                ->err($this->getHelp());
-        } else {
-            $this->err('[Error] ' . $e->getMessage());
+        public function offsetSet(mixed $offset, mixed $value): void
+        {
+            throw new \BadMethodCallException('Cannot set params.');
         }
 
-        if ($v) {
-            $this->err('[Backtrace]:')
-                ->err($e->getTraceAsString());
+        public function offsetUnset(mixed $offset): void
+        {
+            throw new \BadMethodCallException('Cannot unset params.');
         }
-
-        $code = $e->getCode();
-
-        return $code === 0 ? 255 : $code;
     }
 
-    /**
-     * @param int   $offset
-     * @param mixed $default
-     *
-     * @return  mixed|null
-     */
-    public function getArgument($offset, $default = null)
+    class ArgvParser
     {
-        if (!isset($this->args[$offset])) {
-            return $default;
-        }
+        protected array $params = [];
 
-        return $this->args[$offset];
-    }
+        protected array $tokens = [];
 
-    /**
-     * @param int   $offset
-     * @param mixed $value
-     *
-     * @return  static
-     */
-    public function setArgument($offset, $value)
-    {
-        $this->args[$offset] = $value;
+        protected array $existsNames = [];
 
-        return $this;
-    }
+        protected bool $parseOptions = false;
 
-    /**
-     * @param string|array $name
-     * @param mixed        $default
-     *
-     * @return  mixed|null
-     */
-    public function getOption($name, $default = null)
-    {
-        $name = (array) $name;
+        public private(set) int $currentArgument = 0;
 
-        foreach ($name as $n) {
-            if (isset($this->options[$n])) {
-                return $this->options[$n];
+        /** @var array<Parameter> */
+        public private(set) array $parameters = [];
+
+        /**
+         * @var iterable<Parameter>
+         */
+        public iterable $arguments {
+            get {
+                foreach ($this->parameters as $parameter) {
+                    if ($parameter->isArg) {
+                        yield $parameter->primaryName => $parameter;
+                    }
+                }
             }
         }
 
-        return $default;
-    }
-
-    /**
-     * @param string|array $name
-     * @param mixed        $value
-     *
-     * @return  static
-     */
-    public function setOption($name, $value)
-    {
-        $name = (array) $name;
-
-        foreach ($name as $n) {
-            $this->options[$n] = $value;
+        /**
+         * @var iterable<Parameter>
+         */
+        public iterable $options {
+            get {
+                foreach ($this->parameters as $parameter) {
+                    if (!$parameter->isArg) {
+                        yield $parameter->primaryName => $parameter;
+                    }
+                }
+            }
         }
 
-        return $this;
-    }
+        public function addParameter(
+            string|array $name,
+            ParameterType $type,
+            string $description = '',
+            bool $required = false,
+            mixed $default = null,
+            bool $negatable = false,
+        ): Parameter {
+            if (is_string($name) && str_contains($name, '|')) {
+                $name = explode('|', $name);
+                foreach ($name as $n) {
+                    if (!str_starts_with($n, '-')) {
+                        throw new \InvalidArgumentException('Argument name cannot contains "|" sign.');
+                    }
+                }
+            }
+            $parameter = new Parameter($name, $type, $description, $required, $default, $negatable);
+            foreach ((array) $parameter->name as $n) {
+                if (in_array($n, $this->existsNames, true)) {
+                    throw new \InvalidArgumentException('Duplicate parameter name "' . $n . '"');
+                }
+            }
+            array_push($this->existsNames, ...((array) $parameter->name));
+            $this->parameters[$parameter->primaryName] = $parameter;
 
-    /**
-     * @param   string  $text
-     * @param   boolean $nl
-     *
-     * @return  static
-     */
-    public function out($text = null, $nl = true)
-    {
-        fwrite(STDOUT, $text . ($nl ? "\n" : ''));
-
-        return $this;
-    }
-
-    /**
-     * @param   string  $text
-     * @param   boolean $nl
-     *
-     * @return  static
-     */
-    public function err($text = null, $nl = true)
-    {
-        fwrite(STDERR, $text . ($nl ? "\n" : ''));
-
-        return $this;
-    }
-
-    /**
-     * @param string $ask
-     * @param mixed  $default
-     *
-     * @return  string
-     */
-    public function in($ask = '', $default = null, $bool = false)
-    {
-        $this->out($ask, false);
-
-        $in = rtrim(fread(STDIN, 8192), "\n\r");
-
-        if ($bool) {
-            $in = $in === '' ? $default : $in;
-
-            return (bool) $this->mapBoolean($in);
+            return $parameter;
         }
 
-        return $in === '' ? (string) $default : $in;
-    }
-
-    /**
-     * @param string $in
-     *
-     * @return  bool
-     */
-    public function mapBoolean($in)
-    {
-        $in = strtolower((string) $in);
-
-        if (in_array($in, $this->booleanMapping[0], true)) {
-            return false;
+        public function removeParameter(string $name): void
+        {
+            unset($this->parameters[$name]);
         }
 
-        if (in_array($in, $this->booleanMapping[1], true)) {
-            return true;
+        public function getArgument(string $name): ?Parameter
+        {
+            return array_find(iterator_to_array($this->arguments), static fn($n) => $n === $name);
         }
 
-        return null;
+        public function getArgumentByIndex(int $index): ?Parameter
+        {
+            return array_values(iterator_to_array($this->arguments))[$index] ?? null;
+        }
+
+        public function getLastArgument(): ?Parameter
+        {
+            $args = iterator_to_array($this->arguments);
+
+            return $args[array_key_last($args)] ?? null;
+        }
+
+        public function getOption(string $name): ?Parameter
+        {
+            return array_find(
+                iterator_to_array($this->options),
+                static fn(Parameter $option) => $option->hasName($name)
+            );
+        }
+
+        public function mustGetOption(string $name): Parameter
+        {
+            if (!$option = $this->getOption($name)) {
+                throw new InvalidParameterException(\sprintf('The "-%s" option does not exist.', $name));
+            }
+
+            return $option;
+        }
+
+        public function parse(array $argv, bool $validate = true): array
+        {
+            array_shift($argv);
+            $this->currentArgument = 0;
+            $this->parseOptions = true;
+            $this->params = [];
+            $this->tokens = $argv;
+            while (null !== $token = array_shift($this->tokens)) {
+                $this->parseToken((string) $token);
+            }
+
+            if ($validate) {
+                return $this->validateAndCastParams($this->params);
+            }
+
+            return $this->params;
+        }
+
+        public function validateAndCastParams(array $params): array
+        {
+            foreach ($this->parameters as $parameter) {
+                if (!array_key_exists($parameter->primaryName, $params)) {
+                    if ($parameter->isArg && $parameter->required) {
+                        throw new InvalidParameterException(
+                            "Required argument \"{$parameter->primaryName}\" is missing."
+                        );
+                    }
+                    $params[$parameter->primaryName] = $parameter->defaultValue ?? false;
+                } else {
+                    $parameter->validate($this->params[$parameter->primaryName]);
+                    $params[$parameter->primaryName] = $parameter->castValue(
+                        $params[$parameter->primaryName]
+                    );
+                }
+            }
+
+            return $params;
+        }
+
+        protected function parseToken(string $token): void
+        {
+            if ($this->parseOptions && '' === $token) {
+                $this->parseArgument($token);
+            } elseif ($this->parseOptions && '--' === $token) {
+                $this->parseOptions = false;
+            } elseif ($this->parseOptions && str_starts_with($token, '--')) {
+                $this->parseLongOption($token);
+            } elseif ($this->parseOptions && '-' === $token[0] && '-' !== $token) {
+                $this->parseShortOption($token);
+            } else {
+                $this->parseArgument($token);
+            }
+        }
+
+        private function parseShortOption(string $token): void
+        {
+            $name = substr($token, 1);
+            if (\strlen($name) > 1) {
+                $option = $this->getOption($token);
+                if ($option && $option->acceptValue) {
+                    $this->setOptionValue($name[0], substr($name, 1)); // -n[value]
+                } else {
+                    $this->parseShortOptionSet($name);
+                }
+            } else {
+                $this->setOptionValue($name, null);
+            }
+        }
+
+        private function parseShortOptionSet(string $name): void
+        {
+            $len = \strlen($name);
+
+            for ($i = 0; $i < $len; ++$i) {
+                $option = $this->mustGetOption($name[$i]);
+                if ($option->acceptValue) {
+                    $this->setOptionValue($option->primaryName, $i === $len - 1 ? null : substr($name, $i + 1));
+                    break;
+                }
+                $this->setOptionValue($option->primaryName, null);
+            }
+        }
+
+        private function parseLongOption(string $token): void
+        {
+            $name = substr($token, 2);
+            $pos = strpos($name, '=');
+            if ($pos !== false) {
+                $value = substr($name, $pos + 1);
+                if ($value === '') {
+                    array_unshift($this->params, $value);
+                }
+                $this->setOptionValue(substr($name, 0, $pos), $value);
+            } else {
+                $this->setOptionValue($name, null);
+            }
+        }
+
+        private function parseArgument(string $token): void
+        {
+            if ($arg = $this->getArgumentByIndex($this->currentArgument)) {
+                $this->params[$arg->primaryName] = $arg->isArray ? [$token] : $token;
+            } elseif (($last = $this->getLastArgument()) && $last->isArray) {
+                $this->params[$last->primaryName][] = $token;
+            } else {
+                throw new InvalidParameterException("Unknown argument \"$token\".");
+            }
+            $this->currentArgument++;
+        }
+
+        public function setOptionValue(string $name, mixed $value = null): void
+        {
+            $option = $this->getOption($name);
+            // If option not exists, make sure it is negatable
+            if (!$option) {
+                if (str_starts_with($name, 'no-')) {
+                    $option = $this->getOption(substr($name, 3));
+                    if ($option->isBoolean && $option->negatable) {
+                        $this->params[$option->primaryName] = false;
+                    }
+
+                    return;
+                }
+                throw new InvalidParameterException(\sprintf('The "-%s" option does not exist.', $name));
+            }
+            if ($value !== null && !$option->acceptValue) {
+                throw new InvalidParameterException('Option "' . $option->primaryName . '" does not accept value.');
+            }
+            // Try get option value from next token
+            if (\in_array($value, ['', null], true) && $option->acceptValue && \count($this->tokens)) {
+                $next = array_shift($this->tokens);
+                if ((isset($next[0]) && '-' !== $next[0]) || \in_array($next, ['', null], true)) {
+                    $value = $next;
+                } else {
+                    array_unshift($this->tokens, $next);
+                }
+            }
+            if ($value === null && $option->isBoolean) {
+                $value = true;
+            }
+            if ($option->isBoolean) {
+                $value = (bool) $value;
+            }
+            if ($option->isArray) {
+                $this->params[$option->primaryName][] = $value;
+            } elseif ($option->isLevel) {
+                $this->params[$option->primaryName] ??= 0;
+                $this->params[$option->primaryName]++;
+            } else {
+                $this->params[$option->primaryName] = $value;
+            }
+        }
     }
 
     /**
-     * @param   string $command
-     *
-     * @return  static
+     * @method  self description(string $value)
+     * @method  self required(bool $value)
+     * @method  self negatable(bool $value)
+     * @method  self default(bool $value)
      */
-    protected function exec($command)
+    class Parameter
     {
-        $this->out('>> ' . $command);
+        public bool $isArg {
+            get {
+                return is_string($this->name);
+            }
+        }
 
-        system($command);
+        public string $primaryName {
+            get {
+                return is_string($this->name) ? $this->name : $this->name[0];
+            }
+        }
 
-        return $this;
-    }
-
-    /**
-     * @param array $argv
-     *
-     * @return  void
-     */
-    protected function parseArgv($argv)
-    {
-        $this->executable = array_shift($argv);
-        $key = null;
-
-        $out = array();
-
-        for ($i = 0, $j = count($argv); $i < $j; $i++) {
-            $arg = $argv[$i];
-            
-            // --foo --bar=baz
-            if (0 === strpos($arg, '--')) {
-                $eqPos = strpos($arg, '=');
-
-                // --foo
-                if ($eqPos === false) {
-                    $key = substr($arg, 2);
-
-                    // --foo value
-                    if ($i + 1 < $j && $argv[$i + 1][0] !== '-') {
-                        $value = $argv[$i + 1];
-                        $i++;
+        public string $synopsis {
+            get {
+                if (is_string($this->name)) {
+                    return $this->name;
+                }
+                $shorts = [];
+                $fulls = [];
+                foreach ($this->name as $n) {
+                    if (strlen($n) === 1) {
+                        $shorts[] = '-' . $n;
                     } else {
-                        $value = isset($out[$key]) ? $out[$key] : true;
-                    }
-
-                    $out[$key] = $value;
-                } else {
-                    // --bar=baz
-                    $key       = substr($arg, 2, $eqPos - 2);
-                    $value     = substr($arg, $eqPos + 1);
-                    $out[$key] = $value;
-                }
-            } elseif (0 === strpos($arg, '-')) {
-                // -k=value -abc
-
-                // -k=value
-                if (isset($arg[2]) && $arg[2] === '=') {
-                    $key       = $arg[1];
-                    $value     = substr($arg, 3);
-                    $out[$key] = $value;
-                } else {
-                    // -abc
-                    $chars = str_split(substr($arg, 1));
-
-                    foreach ($chars as $char) {
-                        $key       = $char;
-                        $out[$key] = isset($out[$key]) ? $out[$key] + 1 : 1;
-                    }
-
-                    // -a a-value
-                    if (($i + 1 < $j) && ($argv[$i + 1][0] !== '-') && (count($chars) === 1)) {
-                        $out[$key] = $argv[$i + 1];
-                        $i++;
+                        $fulls[] = '--' . $n;
                     }
                 }
-            } else {
-                // Plain-arg
-                $this->args[] = $arg;
+                if ($this->negatable) {
+                    $fulls[] = '--no-' . $this->primaryName;
+                }
+
+                return implode(', ', array_filter([implode('|', $shorts), implode('|', $fulls)]));
             }
         }
 
-        $this->options = $out;
-    }
-}
+        public bool $acceptValue {
+            get {
+                return !$this->isBoolean && !$this->isLevel && !$this->negatable;
+            }
+        }
 
-class CommandArgsException extends \RuntimeException
-{
+        public bool $isArray {
+            get {
+                return $this->type === ParameterType::ARRAY;
+            }
+        }
+
+        public bool $isLevel {
+            get {
+                return $this->type === ParameterType::LEVEL;
+            }
+        }
+
+        public bool $isBoolean {
+            get {
+                return $this->type === ParameterType::BOOLEAN;
+            }
+        }
+
+        public mixed $defaultValue {
+            get {
+                if ($this->isArray) {
+                    return $this->default ?? [];
+                }
+                if ($this->isLevel) {
+                    return $this->default ?? 0;
+                }
+
+                return $this->default;
+            }
+        }
+
+        public function __construct(
+            public string|array $name,
+            public ParameterType $type,
+            public string $description = '',
+            public bool $required = false,
+            public mixed $default = null,
+            public bool $negatable = false,
+        ) {
+            if (is_string($this->name) && str_starts_with($this->name, '-')) {
+                $this->name = [$this->name];
+            }
+            if (is_array($this->name)) {
+                foreach ($this->name as $i => $n) {
+                    if (!str_starts_with($n, '--') && strlen($n) > 2) {
+                        throw new \InvalidArgumentException('Invalid option name "' . $n . '"');
+                    }
+
+                    $this->name[$i] = ltrim($n, '-');
+                }
+            }
+            if ($this->isArray && !is_array($this->defaultValue)) {
+                throw new \InvalidArgumentException("Default value of \"{$this->primaryName}\" must be an array.");
+            }
+            if ($this->isArg) {
+                if ($this->negatable) {
+                    throw new \InvalidArgumentException(
+                        "Argument \"{$this->primaryName}\" cannot be negatable."
+                    );
+                }
+            } else {
+                if ($this->negatable && $this->required) {
+                    throw new \InvalidArgumentException(
+                        "Negatable option \"{$this->primaryName}\" cannot be required."
+                    );
+                }
+            }
+            if ($this->required && $this->default !== null) {
+                throw new \InvalidArgumentException(
+                    "Default value of \"{$this->primaryName}\" cannot be set when required is true."
+                );
+            }
+        }
+
+        public function hasName(string $name): bool
+        {
+            $name = ltrim($name, '-');
+            if (is_string($this->name)) {
+                return $this->name === $name;
+            }
+
+            return array_any($this->name, static fn($n) => $n === $name);
+        }
+
+        public function castValue(mixed $value): mixed
+        {
+            return match ($this->type) {
+                ParameterType::INT, ParameterType::LEVEL => (int) $value,
+                ParameterType::NUMERIC, ParameterType::FLOAT => (float) $value,
+                ParameterType::BOOLEAN => (bool) $value,
+                ParameterType::ARRAY => (array) $value,
+                default => $value,
+            };
+        }
+
+        public function validate(mixed $value): void
+        {
+            if ($value === null) {
+                if ($this->required) {
+                    throw new InvalidParameterException("Required value for \"{$this->primaryName}\" is missing.");
+                }
+
+                return;
+            }
+            $passed = match ($this->type) {
+                ParameterType::INT => is_numeric($value) && ((string) (int) $value) === $value,
+                ParameterType::FLOAT => is_numeric($value) && ((string) (float) $value) === $value,
+                ParameterType::NUMERIC => is_numeric($value),
+                ParameterType::BOOLEAN => is_bool($value) || $value === '1' || $value === '0',
+                ParameterType::ARRAY => is_array($value),
+                default => true,
+            };
+            if (!$passed) {
+                throw new InvalidParameterException(
+                    "Invalid value type for \"{$this->primaryName}\". Expected {$this->type->name}."
+                );
+            }
+        }
+
+        public function __call(string $name, array $args)
+        {
+            if (property_exists($this, $name)) {
+                $this->{$name} = $args[0];
+
+                return $this;
+            }
+            throw new \BadMethodCallException("Method $name() does not exist.");
+        }
+    }
+
+    class ParameterDescriptor
+    {
+        public static function describe(ArgvParser $parser, string $commandName, string $help = ''): string
+        {
+            $lines = ['Usage:'];
+            $lines[] = '  ' . $commandName . ' ' . static::synopsis($parser, true);
+            $arguments = iterator_to_array($parser->arguments);
+            $options = iterator_to_array($parser->options);
+            if (count($arguments)) {
+                $lines[] = '';
+                $lines[] = 'Arguments:';
+                $maxColWidth = 0;
+                $argumentLines = [];
+                foreach ($arguments as $argument) {
+                    $argumentLines[] = static::describeArgument($argument, $maxColWidth);
+                }
+                foreach ($argumentLines as [$start, $end]) {
+                    $spacing = $maxColWidth - strlen($start) + 4;
+                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
+                }
+            }
+            if (count($options)) {
+                $lines[] = '';
+                $lines[] = 'Options:';
+                $maxColWidth = 0;
+                $optionLines = [];
+                foreach ($options as $option) {
+                    $optionLines[] = static::describeOption($option, $maxColWidth);
+                }
+                foreach ($optionLines as [$start, $end]) {
+                    $spacing = $maxColWidth - strlen($start) + 4;
+                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
+                }
+            }
+            if ($help) {
+                $lines[] = '';
+                $lines[] = 'Help:';
+                $lines[] = $help;
+            }
+
+            return implode("\n", $lines);
+        }
+
+        public static function describeArgument(Parameter $parameter, int &$maxWidth = 0): array
+        {
+            if (!static::defaultIsEmpty($parameter)) {
+                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
+            } else {
+                $default = '';
+            }
+            $maxWidth = max($maxWidth, strlen($parameter->synopsis));
+
+            return [$parameter->synopsis, $parameter->description . $default];
+        }
+
+        public static function describeOption(Parameter $parameter, int &$maxWidth = 0): array
+        {
+            if (($parameter->acceptValue || $parameter->negatable) && !static::defaultIsEmpty($parameter)) {
+                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
+            } else {
+                $default = '';
+            }
+            $value = '';
+            if ($parameter->acceptValue) {
+                $value = '=' . strtoupper($parameter->primaryName);
+
+                if (!$parameter->required) {
+                    $value = '[' . $value . ']';
+                }
+            }
+            $synopsis = $parameter->synopsis . ($parameter->acceptValue ? $value : '');
+            $maxWidth = max($maxWidth, strlen($synopsis));
+
+            return [
+                $synopsis,
+                $parameter->description . $default . ($parameter->isArray ? ' (multiple values allowed)' : ''),
+            ];
+        }
+
+        public static function defaultIsEmpty(Parameter $parameter): bool
+        {
+            return $parameter->default === null
+                || (is_array($parameter->default) && count($parameter->default) === 0);
+        }
+
+        public static function formatValue(mixed $value): string
+        {
+            return str_replace('\\\\', '\\', json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE));
+        }
+
+        public static function synopsis(ArgvParser $parser, bool $simple = false): string
+        {
+            $elements = [];
+            if ($simple) {
+                $elements[] = '[options]';
+            } else {
+                foreach ($parser->options as $option) {
+                    $value = '';
+                    if ($option->acceptValue) {
+                        $value = strtoupper($option->primaryName);
+                        if (!$option->required) {
+                            $value = '[' . $value . ']';
+                        }
+                        $value = ' ' . $value;
+                    }
+                    $synopsis = str_replace(', ', '|', $option->synopsis);
+                    $element = $synopsis . $value;
+                    $elements[] = '[' . $element . ']';
+                }
+            }
+            /** @var Parameter[] $arguments */
+            $arguments = iterator_to_array($parser->arguments);
+            if ($elements !== [] && $arguments !== []) {
+                $elements[] = '[--]';
+            }
+            $tail = '';
+            foreach ($arguments as $argument) {
+                $element = '<' . $argument->primaryName . '>';
+                if ($argument->isArray) {
+                    $element .= '...';
+                }
+                if (!$argument->required) {
+                    $element = '[' . $element;
+                    $tail .= ']';
+                }
+                $elements[] = $element;
+            }
+
+            return implode(' ', $elements) . $tail;
+        }
+    }
+
+    enum ParameterType
+    {
+        case STRING;
+        case INT;
+        case NUMERIC;
+        case FLOAT;
+        case BOOLEAN;
+        case LEVEL;
+        case ARRAY;
+    }
+
+    class InvalidParameterException extends \RuntimeException
+    {
+    }
 }

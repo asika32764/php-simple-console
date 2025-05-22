@@ -14,7 +14,7 @@
     },
     "autoload": {
         "files": [
-            "src/SimpleConsole.php"
+            "src/Console.php"
         ]
     },
     "autoload-dev": {

@@ -136,11 +136,11 @@ class ArgvParserTest extends TestCase
             ],
             'Wrong argument format' => [
                 'Hello foo --lat 123.456 -p 500.00 -mq',
-                'Invalid value type for "steps". Expected int.',
+                'Invalid value type for "steps". Expected INT.',
             ],
             'Wrong option format' => [
                 'Hello 200 --lat string -p 500.00 -mq',
-                'Invalid value type for "lat". Expected float.',
+                'Invalid value type for "lat". Expected FLOAT.',
             ],
         ];
     }
