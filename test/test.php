@@ -2,33 +2,44 @@
 
 use Asika\SimpleConsole\Console;
 
-include_once __DIR__ . '/../src/Console.php';
+include_once __DIR__ . '/../vendor/autoload.php';
 
 $app = new class () extends Console
 {
 
     protected function configure(): void
     {
-        // Arguments
-        $this->addParameter('name', type: $this::STRING, description: 'Your name', required: true);
-        $this->addParameter('age', type: $this::LEVEL, description: 'Your age');
-
-        // Name starts with `-` or `--` will be treated as option
-        $this->addParameter('--height', type: $this::FLOAT, description: 'Your height', required: true);
-        $this->addParameter('--location|-l', type: $this::STRING, description: 'Live location', required: true);
-        $this->addParameter('--muted|-m', type: $this::BOOLEAN, description: 'Is muted');
+        $this->addParameter('task', type: $this::STRING, description: 'Task (configure|build|make|move|clear)', required: true);
+        $this->addParameter('--lib-path', type: $this::STRING);
+        $this->addParameter('--temp-path', type: $this::STRING);
+        $this->addParameter('--nested', type: $this::STRING);
+        $this->addParameter('--all', type: $this::STRING);
     }
 
     protected function doExecute(): int|bool
     {
-        $this->writeln('Hello');
-        $this->writeln('Name: ' . $this->get('name'));
-        $this->writeln('Age: ' . $this->get('age'));
-        $this->writeln('Height: ' . $this->get('height'));
-        $this->writeln('Location: ' . $this->get('location'));
-        $this->writeln('Muted: ' . ($this->get('muted') ? 'Y' : 'N'));
+        $task = $this['task'];
 
-        return $this::SUCCESS;
+        $params = [];
+
+        foreach ($this->params as $k => $v) {
+            $params[\Windwalker\Utilities\StrNormalize::toCamelCase($k)] = $v;
+        }
+
+        return $this->$task(...$params);
+    }
+
+    // ...$args is required, otherwise the redundant params will make method calling error
+    protected function build(string $libPath, string $tempPath, ...$args): int
+    {
+        $this->writeln("Building: $libPath | $tempPath");
+        return 0;
+    }
+
+    protected function clear(string $nested, string $dir, ...$args): int
+    {
+        $this->writeln("Clearing: $nested | $dir");
+        return 0;
     }
 };
 $app->execute();

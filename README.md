@@ -872,6 +872,61 @@ public function exec(string $cmd, \Closure|null $output = null, bool $showCmd = 
 }
 ```
 
+## Delegating Multiple Tasks
+
+If your script has multiple tasks, for example, the build script contains `configure|make|clear` etc...
+
+Here is an example to show how to delegate multiple tasks and pass the necessary params to method interface.
+
+```php
+$app = new class () extends Console
+{
+    protected function configure(): void
+    {
+        $this->addParameter('task', type: $this::STRING, description: 'Task (configure|build|make|move|clear)', required: true);
+        $this->addParameter('--lib-path', type: $this::STRING);
+        $this->addParameter('--temp-path', type: $this::STRING);
+        $this->addParameter('--nested', type: $this::STRING);
+        $this->addParameter('--all', type: $this::STRING);
+    }
+
+    protected function doExecute(): int|bool
+    {
+        $params = [];
+
+        foreach ($this->params as $k => $v) {
+            // Use any camel case convert library
+            $params[Str::toCamelCase($k)] = $v;
+        }
+
+        return $this->{$this['task']}(...$params);
+    }
+
+    // `...$args` is required, otherwise the redundant params will make method calling error
+    protected function build(string $libPath, string $tempPath, ...$args): int
+    {
+        $this->writeln("Building: $libPath | $tempPath");
+        return 0;
+    }
+
+    protected function clear(string $nested, string $dir, ...$args): int
+    {
+        $this->writeln("Clearing: $nested | $dir");
+        return 0;
+    }
+};
+$app->execute();
+```
+
+Now run:
+
+```bash
+php make.php build --lib-path foo --temp-path bar
+
+# Building foo | bar
+```
+
+
 ## Contributing and PR is Welcome
 
 I'm apologize that I'm too busy to fix or handle all issues and reports, but pull-request is very welcome 
