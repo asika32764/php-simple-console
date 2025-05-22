@@ -43,6 +43,7 @@ Single file console framework to help you write scripts quickly, **v2.0 requires
   * [Run Sub-Process](#run-sub-process)
     * [Hide Command Name](#hide-command-name)
     * [Custom Output](#custom-output)
+  * [Delegating Multiple Tasks](#delegating-multiple-tasks)
   * [Contributing and PR is Welcome](#contributing-and-pr-is-welcome)
 <!-- TOC -->
 
