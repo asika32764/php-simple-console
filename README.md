@@ -5,44 +5,45 @@
 ](https://packagist.org/packages/asika/simple-console)
 [![Packagist Downloads](https://img.shields.io/packagist/dt/asika/simple-console?style=for-the-badge)](https://packagist.org/packages/asika/simple-console)
 
-Single file console framework to help you write scripts.
+Single file console framework to help you write scripts quickly, **v2.0 requires PHP 8.4 or later**.
+
+> This package is highly inspired by [Symfony Console](https://symfony.com/doc/current/components/console.html) and Python [argparse](https://docs.python.org/3/library/argparse.html).
 
 <!-- TOC -->
-
 * [PHP Simple Console V2.0](#php-simple-console-v20)
-    * [Installation](#installation)
-    * [Getting Started](#getting-started)
-        * [Run Console by Closure](#run-console-by-closure)
-        * [Run Console by Custom Class](#run-console-by-custom-class)
-        * [The Return Value](#the-return-value)
-    * [Parameter Parser](#parameter-parser)
-    * [Parameter Definitions](#parameter-definitions)
-        * [Show Help](#show-help)
-        * [Override Help Information](#override-help-information)
-    * [Parameter Configurations](#parameter-configurations)
-        * [Get Parameters Value](#get-parameters-value)
-        * [Parameters Type](#parameters-type)
-            * [`ARRAY` type](#array-type)
-            * [`LEVEL` type](#level-type)
-        * [Parameters Options](#parameters-options)
-            * [`description`](#description)
-            * [`required`](#required)
-            * [`default`](#default)
-            * [`negatable`](#negatable)
-        * [Parameters Parsing](#parameters-parsing)
-    * [Error Handling](#error-handling)
-        * [Wrong Parameters](#wrong-parameters)
-        * [Verbosity](#verbosity)
-    * [The Built-In Options](#the-built-in-options)
-        * [Disable Built-In Options for Console App](#disable-built-in-options-for-console-app)
-    * [Input/Output](#inputoutput)
-        * [STDIN/STDOUT/STDERR](#stdinstdoutstderr)
-        * [Output Methods](#output-methods)
-        * [Input and Asking Questions](#input-and-asking-questions)
-    * [Run Sub-Process](#run-sub-process)
-        * [Hide Command Name](#hide-command-name)
-        * [Custom Output](#custom-output)
-
+  * [Installation](#installation)
+  * [Getting Started](#getting-started)
+    * [Run Console by Closure](#run-console-by-closure)
+    * [Run Console by Custom Class](#run-console-by-custom-class)
+    * [The Return Value](#the-return-value)
+  * [Parameter Parser](#parameter-parser)
+  * [Parameter Definitions](#parameter-definitions)
+    * [Show Help](#show-help)
+    * [Override Help Information](#override-help-information)
+  * [Parameter Configurations](#parameter-configurations)
+    * [Get Parameters Value](#get-parameters-value)
+    * [Parameters Type](#parameters-type)
+      * [`ARRAY` type](#array-type)
+      * [`LEVEL` type](#level-type)
+    * [Parameters Options](#parameters-options)
+      * [`description`](#description)
+      * [`required`](#required)
+      * [`default`](#default)
+      * [`negatable`](#negatable)
+    * [Parameters Parsing](#parameters-parsing)
+  * [Error Handling](#error-handling)
+    * [Wrong Parameters](#wrong-parameters)
+    * [Verbosity](#verbosity)
+  * [The Built-In Options](#the-built-in-options)
+    * [Disable Built-In Options for Console App](#disable-built-in-options-for-console-app)
+  * [Input/Output](#inputoutput)
+    * [STDIN/STDOUT/STDERR](#stdinstdoutstderr)
+    * [Output Methods](#output-methods)
+    * [Input and Asking Questions](#input-and-asking-questions)
+  * [Run Sub-Process](#run-sub-process)
+    * [Hide Command Name](#hide-command-name)
+    * [Custom Output](#custom-output)
+  * [Contributing and PR is Welcome](#contributing-and-pr-is-welcome)
 <!-- TOC -->
 
 ## Installation
@@ -333,22 +334,40 @@ Options:
 
 ```
 
-Add your header/manual and command name:
+Add your heading/epilog and command name:
 
 ```php
-$app->helpHeader = <<<HEADER
+// Use constructor
+$app = new \Asika\SimpleConsole\Console(
+    heading: <<<HEADER
+    [Console] SHOW ME - v1.0
+    
+    This command can show personal information.
+    HEADER,
+    epilog: <<<EPILOG
+    $ show-me.php John 18 
+    $ show-me.php John 18 --location=Europe --height 1.75 
+    
+    ...more please see https://show-me.example
+    EPILOG,
+    commandName: 'show-me.php'
+);
+
+// Or set properties
+
+$app->heading = <<<HEADER
 [Console] SHOW ME - v1.0
 
 This command can show personal information.
 HEADER;
 
-$app->commandName = 'show-me.php';
-$app->help = <<<HELP
+$app->commandName = 'show-me.php'; // If not provided, will auto use script file name
+$app->epilog = <<<EPILOG
 $ show-me.php John 18 
 $ show-me.php John 18 --location=Europe --height 1.75 
 
 ...more please see https://show-me.example
-HELP;
+EPILOG;
 
 $app->execute();
 ```
@@ -852,3 +871,8 @@ public function exec(string $cmd, \Closure|null $output = null, bool $showCmd = 
     return system($cmd);
 }
 ```
+
+## Contributing and PR is Welcome
+
+I'm apologize that I'm too busy to fix or handle all issues and reports, but pull-request is very welcome 
+and will speed up the fixing process.

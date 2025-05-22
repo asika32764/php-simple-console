@@ -15,14 +15,14 @@ $app->addParameter('--height', type: $app::FLOAT, description: 'Your height', re
 $app->addParameter('--location|-l', type: $app::STRING, description: 'Live location', required: true);
 $app->addParameter('--muted|-m', type: $app::BOOLEAN, description: 'Is muted');
 
-$app->helpHeader = <<<HEADER
+$app->heading = <<<HEADER
 [Console] SHOW ME - v1.0
 
 This command can show personal information.
 HEADER;
 
 $app->commandName = 'show-me.php';
-$app->help = <<<HELP
+$app->epilog = <<<HELP
 $ show-me.php John 18 
 $ show-me.php John 18 --location=Europe --height 1.75 
 

@@ -24,12 +24,6 @@ namespace Asika\SimpleConsole {
 
         public const int FAILURE = 255;
 
-        public string $helpHeader = '';
-
-        public string $help = '';
-
-        public ?string $commandName = null;
-
         public int $verbosity = 0;
 
         public array $params = [];
@@ -64,6 +58,9 @@ namespace Asika\SimpleConsole {
             public $stdout = STDOUT,
             public $stderr = STDERR,
             public $stdin = STDIN,
+            public string $heading = '',
+            public string $epilog = '',
+            public ?string $commandName = null,
             public ArgvParser $parser = new ArgvParser(),
         ) {
             //
@@ -160,8 +157,8 @@ namespace Asika\SimpleConsole {
 
         public function showHelp(): void
         {
-            $help = ParameterDescriptor::describe($this->parser, $this->commandName, $this->help);
-            $this->writeln(ltrim($this->helpHeader . "\n\n" . $help))->newLine();
+            $help = ParameterDescriptor::describe($this->parser, $this->commandName, $this->epilog);
+            $this->writeln(ltrim($this->heading . "\n\n" . $help))->newLine();
         }
 
         public function write(string $message, bool $err = false): static
@@ -753,7 +750,7 @@ namespace Asika\SimpleConsole {
 
     class ParameterDescriptor
     {
-        public static function describe(ArgvParser $parser, string $commandName, string $help = ''): string
+        public static function describe(ArgvParser $parser, string $commandName, string $epilog = ''): string
         {
             $lines = ['Usage:'];
             $lines[] = '  ' . $commandName . ' ' . static::synopsis($parser, true);
@@ -785,10 +782,10 @@ namespace Asika\SimpleConsole {
                     $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
                 }
             }
-            if ($help) {
+            if ($epilog) {
                 $lines[] = '';
                 $lines[] = 'Help:';
-                $lines[] = $help;
+                $lines[] = $epilog;
             }
 
             return implode("\n", $lines);
