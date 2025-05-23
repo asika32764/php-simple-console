@@ -70,14 +70,7 @@ namespace Asika\SimpleConsole {
             mixed $default = null,
             bool $negatable = false,
         ): Parameter {
-            return $this->parser->addParameter(
-                $name,
-                $type,
-                $description,
-                $required,
-                $default,
-                $negatable,
-            );
+            return $this->parser->addParameter($name, $type, $description, $required, $default, $negatable);
         }
 
         public function addHelpParameter(): Parameter
