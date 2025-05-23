@@ -746,7 +746,7 @@ new Console(
 If you want to catch the output, you can set `stdout` to a file pointer or a stream.
 
 ```php
-$fp = fopen('php://stdout', 'r+');
+$fp = fopen('php://memory', 'r+');
 
 $app = new Console(stdout: $fp);
 $app->execute();
