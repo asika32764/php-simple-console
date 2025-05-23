@@ -37,8 +37,7 @@ namespace Asika\SimpleConsole {
 
         public static function createArgvParser(\Closure|null $configure = null): ArgvParser
         {
-            $parser = new ArgvParser();
-            !$configure || $configure($parser);
+            ($parser = new ArgvParser()) && (!$configure || $configure($parser));
 
             return $parser;
         }
@@ -176,11 +175,10 @@ namespace Asika\SimpleConsole {
         public function mapBoolean($in): bool|null
         {
             $in = strtolower((string) $in);
-            [$falsy, $truly] = $this->boolMapping;
-            if (in_array($in, $falsy, true)) {
+            if (in_array($in, $this->boolMapping[0], true)) {
                 return false;
             }
-            if (in_array($in, $truly, true)) {
+            if (in_array($in, $this->boolMapping[1], true)) {
                 return true;
             }
 
@@ -194,9 +192,14 @@ namespace Asika\SimpleConsole {
             if ($process = proc_open($cmd, [["pipe", "r"], ["pipe", "w"], ["pipe", "w"]], $pipes)) {
                 $callback = $output ?: fn($data, $err) => ($output === false) || $this->write($data, $err);
                 while (($out = fgets($pipes[1])) || $err = fgets($pipes[2])) {
-                    !isset($out[0]) || ($callback($out, false) && $outFull .= $out);
-                    !isset($err[0]) || ($callback($err, true) && $errFull .= $err);
-                    $output === false || $outFull = $errFull = '';
+                    if (isset($out[0])) {
+                        $callback($out, false);
+                        $outFull .= $output === false ? $out : '';
+                    }
+                    if (isset($err[0])) {
+                        $callback($err, false);
+                        $errFull .= $output === false ? $err : '';
+                    }
                 }
 
                 $code = proc_close($process);
@@ -425,7 +428,6 @@ namespace Asika\SimpleConsole {
         private function parseShortOptionSet(string $name): void
         {
             $len = \strlen($name);
-
             for ($i = 0; $i < $len; ++$i) {
                 $option = $this->mustGetOption($name[$i]);
                 if ($option->acceptValue) {
@@ -637,7 +639,8 @@ namespace Asika\SimpleConsole {
         public function __call(string $name, array $args)
         {
             if (property_exists($this, $name)) {
-                ($this->{$name} = $args[0]) && $this->selfValidate();
+                $this->{$name} = $args[0];
+                $this->selfValidate();
 
                 return $this;
             }
@@ -670,9 +673,7 @@ namespace Asika\SimpleConsole {
                     $lines[] = '  ' . $start . str_repeat(' ', $maxColWidth - strlen($start) + 4) . $end;
                 }
             }
-            if ($epilog) {
-                $lines[] = "\nHelp:\n$epilog";
-            }
+            $epilog && ($lines[] = "\nHelp:\n$epilog");
 
             return implode("\n", $lines);
         }
