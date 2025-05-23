@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App;
 
 use Asika\SimpleConsole\Console;
+use Asika\SimpleConsole\ExecResult;
 
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -162,7 +163,7 @@ $app = new class () extends Console
         return [$major, $minor, $patch, $prereleaseType, $prereleaseVersion];
     }
 
-    public function exec(string $cmd, ?\Closure $output = null, bool $showCmd = true): int
+    public function exec(string $cmd, \Closure|null|false $output = null, bool $showCmd = true): ExecResult
     {
         $this->writeln('>> ' . ($this->isDryRun ? '(Dry Run) ' : '') . $cmd);
 
@@ -170,7 +171,7 @@ $app = new class () extends Console
             return parent::exec($cmd, $output, false);
         }
 
-        return 0;
+        return new ExecResult();
     }
 
     public function addScript(string $script): static

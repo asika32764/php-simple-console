@@ -38,10 +38,7 @@ namespace Asika\SimpleConsole {
         public static function createArgvParser(\Closure|null $configure = null): ArgvParser
         {
             $parser = new ArgvParser();
-
-            if ($configure) {
-                $configure($parser);
-            }
+            !$configure || $configure($parser);
 
             return $parser;
         }
@@ -63,7 +60,6 @@ namespace Asika\SimpleConsole {
             public ?string $commandName = null,
             public ArgvParser $parser = new ArgvParser(),
         ) {
-            //
         }
 
         public function addParameter(
@@ -86,21 +82,12 @@ namespace Asika\SimpleConsole {
 
         public function addHelpParameter(): Parameter
         {
-            return $this->addParameter(
-                '--help|-h',
-                static::BOOLEAN,
-                'Show description of all parameters',
-                default: false
-            );
+            return $this->addParameter('--help|-h', static::BOOLEAN, 'Show description of all parameters', false);
         }
 
         public function addVerbosityParameter(): Parameter
         {
-            return $this->addParameter(
-                '--verbosity|-v',
-                static::LEVEL,
-                'The verbosity level of the output',
-            );
+            return $this->addParameter('--verbosity|-v', static::LEVEL, 'The verbosity level of the output');
         }
 
         public function get(string $name, mixed $default = null): mixed
@@ -126,10 +113,7 @@ namespace Asika\SimpleConsole {
             $argv = $argv ?? $_SERVER['argv'];
             $this->commandName ??= basename($argv[0]);
             try {
-                if (!$this->disableDefaultParameters) {
-                    $this->addHelpParameter();
-                    $this->addVerbosityParameter();
-                }
+                $this->disableDefaultParameters || ($this->addHelpParameter() && $this->addVerbosityParameter());
                 $this->configure();
                 $this->params = $this->parser->parse($argv, false);
                 if (!$this->disableDefaultParameters) {
@@ -170,16 +154,12 @@ namespace Asika\SimpleConsole {
 
         public function writeln(string $message = '', bool $err = false): static
         {
-            $this->write($message . "\n", $err);
-
-            return $this;
+            return $this->write($message . "\n", $err);
         }
 
         public function newLine(int $lines = 1, bool $err = false): static
         {
-            $this->write(str_repeat("\n", $lines), $err);
-
-            return $this;
+            return $this->write(str_repeat("\n", $lines), $err);
         }
 
         public function in(): string
@@ -214,49 +194,36 @@ namespace Asika\SimpleConsole {
             return null;
         }
 
-        public function exec(string $cmd, ?\Closure $output = null, bool $showCmd = true): int
+        public function exec(string $cmd, \Closure|null|false $output = null, bool $showCmd = true): ExecResult
         {
-            if ($showCmd) {
-                $this->writeln('>> ' . $cmd);
-            }
-            $descriptorspec = [
-                0 => ["pipe", "r"],  // stdin
-                1 => ["pipe", "w"],  // stdout
-                2 => ["pipe", "w"],   // stderr
-            ];
-            if ($process = proc_open($cmd, $descriptorspec, $pipes)) {
-                $output ??= fn($data, $err) => $this->write($data, $err);
+            !$showCmd || $this->writeln('>> ' . $cmd);
+            [$outFull, $errFull, $code] = ['', '', 255];
+            if ($process = proc_open($cmd, [["pipe", "r"], ["pipe", "w"], ["pipe", "w"]], $pipes)) {
+                $callback = $output ?: fn($data, $err) => ($output === false) || $this->write($data, $err);
                 while (($out = fgets($pipes[1])) || $err = fgets($pipes[2])) {
-                    if (isset($out[0])) {
-                        $output($out, false);
-                    }
-                    if (isset($err[0])) {
-                        $output($err, true);
-                    }
+                    !isset($out[0]) || ($callback($out, false) && $outFull .= $out);
+                    !isset($err[0]) || ($callback($err, true) && $errFull .= $err);
+                    $output === false || $outFull = $errFull = '';
                 }
 
-                return proc_close($process);
+                $code = proc_close($process);
             }
 
-            return 255;
+            return new ExecResult($code, $outFull, $errFull);
         }
 
-        public function mustExec(string $cmd, ?\Closure $output = null): int
+        public function mustExec(string $cmd, ?\Closure $output = null): ExecResult
         {
-            if (($result = $this->exec($cmd, $output)) !== 0) {
-                throw new \RuntimeException('Command "' . $cmd . '" failed with code ' . $result);
-            }
+            $result = $this->exec($cmd, $output);
+            $result->success || throw new \RuntimeException('Command "' . $cmd . '" failed with code ' . $result->code);
 
             return $result;
         }
 
         protected function handleException(\Throwable $e): int
         {
-            $v = $this->verbosity;
-
             if ($e instanceof InvalidParameterException) {
-                $this->writeln('[Warning] ' . $e->getMessage(), true)
-                    ->newLine(err: true)
+                $this->writeln('[Warning] ' . $e->getMessage(), true)->newLine(err: true)
                     ->writeln(
                         $this->commandName . ' ' . ParameterDescriptor::synopsis($this->parser, false),
                         true
@@ -264,15 +231,12 @@ namespace Asika\SimpleConsole {
             } else {
                 $this->writeln('[Error] ' . $e->getMessage(), true);
             }
-
-            if ($v > 0) {
+            if ($this->verbosity > 0) {
                 $this->writeln('[Backtrace]:', true)
                     ->writeln($e->getTraceAsString(), true);
             }
 
-            $code = $e->getCode();
-
-            return $code === 0 ? 255 : $code;
+            return $e->getCode() === 0 ? 255 : $e->getCode();
         }
 
         public function offsetExists(mixed $offset): bool
@@ -296,45 +260,40 @@ namespace Asika\SimpleConsole {
         }
     }
 
+    class ExecResult
+    {
+        public bool $success {
+            get => $this->code === 0;
+        }
+
+        public function __construct(public int $code = 0, public string $output = '', public string $errOutput = '')
+        {
+        }
+    }
+
     class ArgvParser
     {
-        protected array $params = [];
+        private array $params = [];
 
-        protected array $tokens = [];
+        private array $tokens = [];
 
-        protected array $existsNames = [];
+        private array $existsNames = [];
 
-        protected bool $parseOptions = false;
+        private bool $parseOptions = false;
 
         public private(set) int $currentArgument = 0;
 
         /** @var array<Parameter> */
         public private(set) array $parameters = [];
 
-        /**
-         * @var iterable<Parameter>
-         */
-        public iterable $arguments {
-            get {
-                foreach ($this->parameters as $parameter) {
-                    if ($parameter->isArg) {
-                        yield $parameter->primaryName => $parameter;
-                    }
-                }
-            }
+        /** @var array<Parameter> */
+        public array $arguments {
+            get => array_filter($this->parameters, static fn($parameter) => $parameter->isArg);
         }
 
-        /**
-         * @var iterable<Parameter>
-         */
-        public iterable $options {
-            get {
-                foreach ($this->parameters as $parameter) {
-                    if (!$parameter->isArg) {
-                        yield $parameter->primaryName => $parameter;
-                    }
-                }
-            }
+        /** @var array<Parameter> */
+        public array $options {
+            get => array_filter($this->parameters, static fn($parameter) => !$parameter->isArg);
         }
 
         public function addParameter(
@@ -360,9 +319,9 @@ namespace Asika\SimpleConsole {
                 }
             }
             array_push($this->existsNames, ...((array) $parameter->name));
-            $this->parameters[$parameter->primaryName] = $parameter;
+            ($this->parameters[$parameter->primaryName] = $parameter) && $parameter->selfValidate();
 
-            return $parameter->selfValidate();
+            return $parameter;
         }
 
         public function removeParameter(string $name): void
@@ -372,27 +331,24 @@ namespace Asika\SimpleConsole {
 
         public function getArgument(string $name): ?Parameter
         {
-            return array_find(iterator_to_array($this->arguments), static fn($n) => $n === $name);
+            return array_find($this->arguments, static fn($n) => $n === $name);
         }
 
         public function getArgumentByIndex(int $index): ?Parameter
         {
-            return array_values(iterator_to_array($this->arguments))[$index] ?? null;
+            return array_values($this->arguments)[$index] ?? null;
         }
 
         public function getLastArgument(): ?Parameter
         {
-            $args = iterator_to_array($this->arguments);
+            $args = $this->arguments;
 
             return $args[array_key_last($args)] ?? null;
         }
 
         public function getOption(string $name): ?Parameter
         {
-            return array_find(
-                iterator_to_array($this->options),
-                static fn(Parameter $option) => $option->hasName($name)
-            );
+            return array_find($this->options, static fn(Parameter $option) => $option->hasName($name));
         }
 
         public function mustGetOption(string $name): Parameter
@@ -429,17 +385,14 @@ namespace Asika\SimpleConsole {
         {
             foreach ($this->parameters as $parameter) {
                 if (!array_key_exists($parameter->primaryName, $params)) {
-                    if ($parameter->isArg && $parameter->required) {
-                        throw new InvalidParameterException(
-                            "Required argument \"{$parameter->primaryName}\" is missing."
-                        );
-                    }
+                    $parameter->assertInput(
+                        !$parameter->isArg || !$parameter->required,
+                        "Required argument \"{$parameter->primaryName}\" is missing."
+                    );
                     $params[$parameter->primaryName] = $parameter->defaultValue ?? false;
                 } else {
                     $parameter->validate($this->params[$parameter->primaryName]);
-                    $params[$parameter->primaryName] = $parameter->castValue(
-                        $params[$parameter->primaryName]
-                    );
+                    $params[$parameter->primaryName] = $parameter->castValue($params[$parameter->primaryName]);
                 }
             }
 
@@ -496,9 +449,7 @@ namespace Asika\SimpleConsole {
             $pos = strpos($name, '=');
             if ($pos !== false) {
                 $value = substr($name, $pos + 1);
-                if ($value === '') {
-                    array_unshift($this->params, $value);
-                }
+                $value !== '' || array_unshift($this->params, $value);
                 $this->setOptionValue(substr($name, 0, $pos), $value);
             } else {
                 $this->setOptionValue($name, null);
@@ -508,8 +459,8 @@ namespace Asika\SimpleConsole {
         private function parseArgument(string $token): void
         {
             if ($arg = $this->getArgumentByIndex($this->currentArgument)) {
-                $this->params[$arg->primaryName] = $arg->isArray ? [$token] : $token;
-            } elseif (($last = $this->getLastArgument()) && $last->isArray) {
+                $this->params[$arg->primaryName] = $arg->type === ParameterType::ARRAY ? [$token] : $token;
+            } elseif (($last = $this->getLastArgument()) && $last->type === ParameterType::ARRAY) {
                 $this->params[$last->primaryName][] = $token;
             } else {
                 throw new InvalidParameterException("Unknown argument \"$token\".");
@@ -524,7 +475,7 @@ namespace Asika\SimpleConsole {
             if (!$option) {
                 if (str_starts_with($name, 'no-')) {
                     $option = $this->getOption(substr($name, 3));
-                    if ($option->isBoolean && $option->negatable) {
+                    if ($option->type === ParameterType::BOOLEAN && $option->negatable) {
                         $this->params[$option->primaryName] = false;
                     }
 
@@ -532,9 +483,7 @@ namespace Asika\SimpleConsole {
                 }
                 throw new InvalidParameterException(\sprintf('The "-%s" option does not exist.', $name));
             }
-            if ($value !== null && !$option->acceptValue) {
-                throw new InvalidParameterException('Option "' . $option->primaryName . '" does not accept value.');
-            }
+            $option->assertInput($value === null || $option->acceptValue, 'Option "%s" does not accept value.');
             // Try get option value from next token
             if (\in_array($value, ['', null], true) && $option->acceptValue && \count($this->tokens)) {
                 $next = array_shift($this->tokens);
@@ -544,15 +493,12 @@ namespace Asika\SimpleConsole {
                     array_unshift($this->tokens, $next);
                 }
             }
-            if ($value === null && $option->isBoolean) {
-                $value = true;
+            if ($option->type === ParameterType::BOOLEAN) {
+                $value = $value === null || $value;
             }
-            if ($option->isBoolean) {
-                $value = (bool) $value;
-            }
-            if ($option->isArray) {
+            if ($option->type === ParameterType::ARRAY) {
                 $this->params[$option->primaryName][] = $value;
-            } elseif ($option->isLevel) {
+            } elseif ($option->type === ParameterType::LEVEL) {
                 $this->params[$option->primaryName] ??= 0;
                 $this->params[$option->primaryName]++;
             } else {
@@ -570,15 +516,11 @@ namespace Asika\SimpleConsole {
     class Parameter
     {
         public bool $isArg {
-            get {
-                return is_string($this->name);
-            }
+            get => is_string($this->name);
         }
 
         public string $primaryName {
-            get {
-                return is_string($this->name) ? $this->name : $this->name[0];
-            }
+            get => is_string($this->name) ? $this->name : $this->name[0];
         }
 
         public string $synopsis {
@@ -604,40 +546,15 @@ namespace Asika\SimpleConsole {
         }
 
         public bool $acceptValue {
-            get {
-                return !$this->isBoolean && !$this->isLevel && !$this->negatable;
-            }
-        }
-
-        public bool $isArray {
-            get {
-                return $this->type === ParameterType::ARRAY;
-            }
-        }
-
-        public bool $isLevel {
-            get {
-                return $this->type === ParameterType::LEVEL;
-            }
-        }
-
-        public bool $isBoolean {
-            get {
-                return $this->type === ParameterType::BOOLEAN;
-            }
+            get => $this->type !== ParameterType::BOOLEAN && $this->type !== ParameterType::LEVEL && !$this->negatable;
         }
 
         public mixed $defaultValue {
-            get {
-                if ($this->isArray) {
-                    return $this->default ?? [];
-                }
-                if ($this->isLevel) {
-                    return $this->default ?? 0;
-                }
-
-                return $this->default;
-            }
+            get => match ($this->type) {
+                ParameterType::ARRAY => $this->default ?? [],
+                ParameterType::LEVEL => $this->default ?? 0,
+                default => $this->default,
+            };
         }
 
         public function __construct(
@@ -648,60 +565,41 @@ namespace Asika\SimpleConsole {
             public mixed $default = null,
             public bool $negatable = false,
         ) {
-            if (is_string($this->name) && str_starts_with($this->name, '-')) {
-                $this->name = [$this->name];
-            }
+            $this->name = is_string($this->name) && str_starts_with($this->name, '-') ? [$this->name] : $this->name;
             if (is_array($this->name)) {
                 foreach ($this->name as $i => $n) {
-                    if (!str_starts_with($n, '--') && strlen($n) > 2) {
-                        throw new \InvalidArgumentException('Invalid option name "' . $n . '"');
-                    }
-
+                    $this->assertArg(str_starts_with($n, '--') || strlen($n) <= 2);
                     $this->name[$i] = ltrim($n, '-');
                 }
             }
         }
 
-        public function selfValidate(): static
+        public function selfValidate(): void
         {
-            if ($this->isArray && !is_array($this->defaultValue)) {
-                throw new \InvalidArgumentException("Default value of \"{$this->primaryName}\" must be an array.");
-            }
+            $this->assertArg(
+                $this->type !== ParameterType::ARRAY || is_array($this->defaultValue),
+                "Default value of \"%s\" must be an array."
+            );
             if ($this->isArg) {
-                if ($this->negatable) {
-                    throw new \InvalidArgumentException(
-                        "Argument \"{$this->primaryName}\" cannot be negatable."
-                    );
-                }
-                if ($this->isBoolean || $this->isLevel) {
-                    throw new \InvalidArgumentException(
-                        "Argument \"{$this->primaryName}\" cannot be type: {$this->type->name}."
-                    );
-                }
-            } else {
-                if ($this->negatable && $this->required) {
-                    throw new \InvalidArgumentException(
-                        "Negatable option \"{$this->primaryName}\" cannot be required."
-                    );
-                }
-            }
-            if ($this->required && $this->default !== null) {
-                throw new \InvalidArgumentException(
-                    "Default value of \"{$this->primaryName}\" cannot be set when required is true."
+                $this->assertArg(!$this->negatable, "Argument \"%s\" cannot be negatable.");
+                $this->assertArg(
+                    $this->type !== ParameterType::BOOLEAN && $this->type !== ParameterType::LEVEL,
+                    "Argument \"%s\" cannot be type: {$this->type->name}."
                 );
+            } else {
+                $this->assertArg(!$this->negatable || !$this->required, "Negatable option \"%s\" cannot be required.");
             }
-
-            return $this;
+            $this->assertArg(
+                !$this->required || $this->default === null,
+                "Default value of \"%s\" cannot be set when required is true."
+            );
         }
 
         public function hasName(string $name): bool
         {
             $name = ltrim($name, '-');
-            if (is_string($this->name)) {
-                return $this->name === $name;
-            }
 
-            return array_any($this->name, static fn($n) => $n === $name);
+            return is_string($this->name) ? $this->name === $name : array_any($this->name, fn($n) => $n === $name);
         }
 
         public function castValue(mixed $value): mixed
@@ -718,9 +616,7 @@ namespace Asika\SimpleConsole {
         public function validate(mixed $value): void
         {
             if ($value === null) {
-                if ($this->required) {
-                    throw new InvalidParameterException("Required value for \"{$this->primaryName}\" is missing.");
-                }
+                $this->assertInput(!$this->required, "Required value for \"%s\" is missing.");
 
                 return;
             }
@@ -732,19 +628,25 @@ namespace Asika\SimpleConsole {
                 ParameterType::ARRAY => is_array($value),
                 default => true,
             };
-            if (!$passed) {
-                throw new InvalidParameterException(
-                    "Invalid value type for \"{$this->primaryName}\". Expected {$this->type->name}."
-                );
-            }
+            $this->assertInput($passed, "Invalid value type for \"%s\". Expected %s.");
+        }
+
+        public function assertArg(mixed $value, ?string $message = ''): void
+        {
+            $value || throw new \InvalidArgumentException(sprintf($message, $this->primaryName, $this->type->name));
+        }
+
+        public function assertInput(mixed $value, ?string $message = ''): void
+        {
+            $value || throw new InvalidParameterException(sprintf($message, $this->primaryName, $this->type->name));
         }
 
         public function __call(string $name, array $args)
         {
             if (property_exists($this, $name)) {
-                $this->{$name} = $args[0];
+                ($this->{$name} = $args[0]) && $this->selfValidate();
 
-                return $this->selfValidate();
+                return $this;
             }
             throw new \BadMethodCallException("Method $name() does not exist.");
         }
@@ -754,40 +656,29 @@ namespace Asika\SimpleConsole {
     {
         public static function describe(ArgvParser $parser, string $commandName, string $epilog = ''): string
         {
-            $lines = ['Usage:'];
-            $lines[] = '  ' . $commandName . ' ' . static::synopsis($parser, true);
-            $arguments = iterator_to_array($parser->arguments);
-            $options = iterator_to_array($parser->options);
-            if (count($arguments)) {
-                $lines[] = '';
-                $lines[] = 'Arguments:';
+            $lines[] = sprintf("Usage:\n  %s %s", $commandName, static::synopsis($parser, true));
+            if (count($parser->arguments)) {
+                $lines[] = "\nArguments:";
                 $maxColWidth = 0;
-                $argumentLines = [];
-                foreach ($arguments as $argument) {
+                foreach ($parser->arguments as $argument) {
                     $argumentLines[] = static::describeArgument($argument, $maxColWidth);
                 }
-                foreach ($argumentLines as [$start, $end]) {
-                    $spacing = $maxColWidth - strlen($start) + 4;
-                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
+                foreach ($argumentLines ?? [] as [$start, $end]) {
+                    $lines[] = '  ' . $start . str_repeat(' ', $maxColWidth - strlen($start) + 4) . $end;
                 }
             }
-            if (count($options)) {
-                $lines[] = '';
-                $lines[] = 'Options:';
+            if (count($parser->options)) {
+                $lines[] = "\nOptions:";
                 $maxColWidth = 0;
-                $optionLines = [];
-                foreach ($options as $option) {
+                foreach ($parser->options as $option) {
                     $optionLines[] = static::describeOption($option, $maxColWidth);
                 }
-                foreach ($optionLines as [$start, $end]) {
-                    $spacing = $maxColWidth - strlen($start) + 4;
-                    $lines[] = '  ' . $start . str_repeat(' ', $spacing) . $end;
+                foreach ($optionLines ?? [] as [$start, $end]) {
+                    $lines[] = '  ' . $start . str_repeat(' ', $maxColWidth - strlen($start) + 4) . $end;
                 }
             }
             if ($epilog) {
-                $lines[] = '';
-                $lines[] = 'Help:';
-                $lines[] = $epilog;
+                $lines[] = "\nHelp:\n$epilog";
             }
 
             return implode("\n", $lines);
@@ -795,11 +686,7 @@ namespace Asika\SimpleConsole {
 
         public static function describeArgument(Parameter $parameter, int &$maxWidth = 0): array
         {
-            if (!static::defaultIsEmpty($parameter)) {
-                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
-            } else {
-                $default = '';
-            }
+            $default = !static::noDefault($parameter) ? ' [default: ' . static::format($parameter->default) . ']' : '';
             $maxWidth = max($maxWidth, strlen($parameter->synopsis));
 
             return [$parameter->synopsis, $parameter->description . $default];
@@ -807,35 +694,26 @@ namespace Asika\SimpleConsole {
 
         public static function describeOption(Parameter $parameter, int &$maxWidth = 0): array
         {
-            if (($parameter->acceptValue || $parameter->negatable) && !static::defaultIsEmpty($parameter)) {
-                $default = ' [default: ' . static::formatValue($parameter->default) . ']';
-            } else {
-                $default = '';
-            }
-            $value = '';
-            if ($parameter->acceptValue) {
-                $value = '=' . strtoupper($parameter->primaryName);
-
-                if (!$parameter->required) {
-                    $value = '[' . $value . ']';
-                }
-            }
+            $default = ($parameter->acceptValue || $parameter->negatable) && !static::noDefault($parameter)
+                ? ' [default: ' . static::format($parameter->default) . ']'
+                : '';
+            $value = '=' . strtoupper($parameter->primaryName);
+            $value = $parameter->required ? $value : '[' . $value . ']';
             $synopsis = $parameter->synopsis . ($parameter->acceptValue ? $value : '');
             $maxWidth = max($maxWidth, strlen($synopsis));
 
             return [
                 $synopsis,
-                $parameter->description . $default . ($parameter->isArray ? ' (multiple values allowed)' : ''),
+                $parameter->description . $default . ($parameter->type === ParameterType::ARRAY ? ' (multiple values allowed)' : ''),
             ];
         }
 
-        public static function defaultIsEmpty(Parameter $parameter): bool
+        public static function noDefault(Parameter $parameter): bool
         {
-            return $parameter->default === null
-                || (is_array($parameter->default) && count($parameter->default) === 0);
+            return $parameter->default === null || (is_array($parameter->default) && count($parameter->default) === 0);
         }
 
-        public static function formatValue(mixed $value): string
+        public static function format(mixed $value): string
         {
             return str_replace('\\\\', '\\', json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE));
         }
@@ -847,30 +725,18 @@ namespace Asika\SimpleConsole {
                 $elements[] = '[options]';
             } else {
                 foreach ($parser->options as $option) {
-                    $value = '';
-                    if ($option->acceptValue) {
-                        $value = strtoupper($option->primaryName);
-                        if (!$option->required) {
-                            $value = '[' . $value . ']';
-                        }
-                        $value = ' ' . $value;
-                    }
-                    $synopsis = str_replace(', ', '|', $option->synopsis);
-                    $element = $synopsis . $value;
+                    $value = strtoupper($option->primaryName);
+                    $value = !$option->required ? '[' . $value . ']' : $value;
+                    $element = str_replace(', ', '|', $option->synopsis) . ($option->acceptValue ? ' ' . $value : '');
                     $elements[] = '[' . $element . ']';
                 }
             }
-            /** @var Parameter[] $arguments */
-            $arguments = iterator_to_array($parser->arguments);
-            if ($elements !== [] && $arguments !== []) {
+            if ($elements !== [] && $parser->arguments !== []) {
                 $elements[] = '[--]';
             }
             $tail = '';
-            foreach ($arguments as $argument) {
-                $element = '<' . $argument->primaryName . '>';
-                if ($argument->isArray) {
-                    $element .= '...';
-                }
+            foreach ($parser->arguments as $argument) {
+                $element = ($argument->type === ParameterType::ARRAY ? '...' : '') . '<' . $argument->primaryName . '>';
                 if (!$argument->required) {
                     $element = '[' . $element;
                     $tail .= ']';

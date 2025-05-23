@@ -43,6 +43,8 @@ Single file console framework to help you write scripts quickly, **v2.0 requires
   * [Run Sub-Process](#run-sub-process)
     * [Hide Command Name](#hide-command-name)
     * [Custom Output](#custom-output)
+    * [Disable the Output](#disable-the-output)
+    * [Override `exec()`](#override-exec)
   * [Delegating Multiple Tasks](#delegating-multiple-tasks)
   * [Contributing and PR is Welcome](#contributing-and-pr-is-welcome)
 <!-- TOC -->
@@ -806,11 +808,16 @@ Use `exec()` to run a sub-process, it will instantly print the output and return
 $app->exec('ls');
 $app->exec('git status');
 $app->exec('git commit ...');
-$code = $app->exec('git push');
+$result = $app->exec('git push');
 
-if ($code !== 0) {
+// All output will instantly print to STDOUT
+
+if ($result->code !== 0) {
     // Failure
 }
+
+$result->code; // 0 is success
+$result->success; // BOOL
 ```
 
 Use `mustExec()` to make sure a sub-process should run success, otherwise it will throw an exception.
@@ -853,7 +860,7 @@ $log = '';
 
 $app->exec(
     'cmd ...',
-    function (string $data, bool $err) use ($app, &$log) {
+    output: function (string $data, bool $err) use ($app, &$log) {
         $app->write($data, $err);
         
         $log .= $data;
@@ -861,15 +868,42 @@ $app->exec(
 );
 ```
 
+### Disable the Output
+
+Use `false` to disable the output, you can get full output from result object after sub-process finished.
+
+Note, the output will only write to result object if `output` set to `false`. If you set `output` as closure or
+keep default `NULL`, the output will be empty in result object.
+
+```php
+$result = $app->exec('cmd ...', output: false);
+
+$result->output; // StdOutput of sub-process
+$result->errOutput; // StdErr Output of sub-process
+
+
+// Below will not write to the result object
+$result = $app->exec('cmd ...');
+// OR
+$result = $app->exec('cmd ...', output: function () { ... });
+
+$result->output; // Empty
+$result->errOutput; // Empty
+```
+
+### Override `exec()`
+
 By now, running sub-process by `prop_open()` is in BETA, if `prop_open()` not work for your environment, simply override
 `exec()` to use PHP `system()` instead.
 
 ```php
-public function exec(string $cmd, \Closure|null $output = null, bool $showCmd = true): int
+public function exec(string $cmd, \Closure|null $output = null, bool $showCmd = true): ExecResult
 {
-    $this->writeln('>> ' . $cmd);
+    !$showCmd || $this->writeln('>> ' . $cmd);
+    
+    $returnLine = system($cmd, $code);
 
-    return system($cmd);
+    return new \Asika\SimpleConsole\ExecResult($code, $returnLine, $returnLine);
 }
 ```
 
