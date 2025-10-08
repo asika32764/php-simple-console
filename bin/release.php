@@ -7,7 +7,7 @@ namespace App;
 use Asika\SimpleConsole\Console;
 use Asika\SimpleConsole\ExecResult;
 
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/Console.php';
 
 $app = new class () extends Console
 {
